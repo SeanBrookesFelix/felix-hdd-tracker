@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Felix Studios — Capacity Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0b;
+  --surface:#161614;
+  --surface2:#1e1e1b;
+  --surface3:#252520;
+  --border:#2c2c28;
+  --border-h:#3c3c36;
+  --text1:#ece9e0;
+  --text2:#8a8780;
+  --text3:#4e4c48;
+  --accent:#c8a86a;
+  --accent-bg:#2a2010;
+  --green:#4a8c5a;
+  --green-dim:#2a4a30;
+  --green-text:#6db87e;
+  --amber:#c07830;
+  --amber-dim:#4a2e10;
+  --amber-text:#d49050;
+  --red:#a83030;
+  --red-bg:#1e0c0c;
+  --red-text:#c85050;
+  --blue:#3d78c0;
+  --blue-dim:#152a48;
+  --blue-text:#6898d8;
+  --purple:#7060c0;
+  --purple-dim:#2a1e50;
+  --purple-text:#9880d8;
+  --gray-dim:#252520;
+  --free:#1e1e1b;
+  --r:6px;--r-lg:12px;
+}
+html{font-size:15px;-webkit-font-smoothing:antialiased}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text1);min-height:100vh;line-height:1.5}
+
+/* Header */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{font-size:13px;font-weight:500;letter-spacing:.12em;text-transform:uppercase}
+.logo-divider{width:1px;height:16px;background:var(--border)}
+.logo-sub{font-size:12px;color:var(--text3);letter-spacing:.04em}
+.nav-links{display:flex;gap:4px}
+.nav-link{font-size:12px;color:var(--text2);padding:5px 12px;border-radius:20px;text-decoration:none;border:1px solid transparent;transition:all .12s}
+.nav-link:hover{color:var(--text1);border-color:var(--border)}
+.nav-link.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+/* Main */
+.main{max-width:980px;margin:0 auto;padding:32px 20px 80px}
+
+/* Summary stats */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
+.stat-label{font-size:11px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:500;font-family:'DM Mono',monospace;color:var(--text1)}
+.stat-value.green{color:var(--green-text)}
+.stat-value.amber{color:var(--amber-text)}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:3px}
+
+/* Filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+.filter-label{font-size:11px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.pill{padding:5px 13px;border-radius:20px;font-size:12px;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .12s;white-space:nowrap}
+.pill:hover{border-color:var(--border-h);color:var(--text1)}
+.pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+/* Client section */
+.client-group{margin-bottom:32px}
+.client-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer;user-select:none}
+.client-name{font-size:13px;font-weight:500;letter-spacing:.04em;color:var(--text2)}
+.client-meta{font-size:11px;color:var(--text3)}
+.client-toggle{font-size:11px;color:var(--text3)}
+.client-drives{display:flex;flex-direction:column;gap:6px}
+.client-group.collapsed .client-drives{display:none}
+.client-group.collapsed .client-toggle::before{content:"▶  "}
+.client-group:not(.collapsed) .client-toggle::before{content:"▼  "}
+
+/* Drive row */
+.drive-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;transition:border-color .12s}
+.drive-row:hover{border-color:var(--border-h)}
+.drive-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.drive-name{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--text1);flex-shrink:0;min-width:130px}
+.drive-custodian{font-size:11px;color:var(--text3);flex-shrink:0}
+.status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-active{background:var(--green)}
+.dot-faulty{background:var(--red)}
+.dot-transit{background:var(--amber)}
+.drive-spacer{flex:1}
+.drive-stats{display:flex;gap:14px;flex-shrink:0}
+.drive-stat{font-size:11px;color:var(--text3);white-space:nowrap}
+.drive-stat b{color:var(--text2);font-weight:400}
+.no-scan{font-size:11px;color:var(--text3);font-style:italic}
+
+/* Capacity bar */
+.bar-wrap{position:relative;height:28px;border-radius:var(--r);overflow:hidden;background:var(--surface3);display:flex}
+.bar-seg{height:100%;transition:opacity .1s;position:relative;cursor:default;flex-shrink:0}
+.bar-seg:hover{opacity:.8}
+.bar-free{flex:1;background:var(--surface3);min-width:2px}
+.bar-over{background:var(--red);flex-shrink:0}
+
+/* Tooltip */
+.tip{position:fixed;background:var(--surface2);border:1px solid var(--border-h);border-radius:var(--r);padding:8px 12px;font-size:12px;pointer-events:none;z-index:999;max-width:280px;opacity:0;transition:opacity .1s}
+.tip.show{opacity:1}
+.tip-name{color:var(--text1);font-weight:500;margin-bottom:3px;line-height:1.4}
+.tip-size{color:var(--accent);font-family:'DM Mono',monospace;font-size:11px}
+.tip-pct{color:var(--text3);font-size:11px}
+
+/* Legend */
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* Unscanned notice */
+.unscanned-note{font-size:12px;color:var(--text3);background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 14px;margin-bottom:16px}
+.unscanned-note b{color:var(--text2);font-weight:400}
+
+/* States */
+.state{text-align:center;padding:60px 20px;color:var(--text3)}
+.spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Unscanned bar */
+.bar-unscanned{height:100%;background:repeating-linear-gradient(90deg,var(--surface3) 0,var(--surface3) 4px,var(--border) 4px,var(--border) 8px);flex:1;display:flex;align-items:center;padding:0 10px}
+.bar-unscanned-label{font-size:10px;color:var(--text3);letter-spacing:.04em}
+
+@media(max-width:600px){
+  .header{padding:0 14px}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .drive-stats{display:none}
+  .drive-name{min-width:100px}
+  .nav-links{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="tip" id="tip"></div>
+
+<header class="header">
+  <div class="logo">
+    <span class="logo-mark">Felix Studios</span>
+    <div class="logo-divider"></div>
+    <span class="logo-sub">HDD Asset Tracker</span>
+  </div>
+  <nav class="nav-links">
+    <a class="nav-link" href="index.html">Search</a>
+    <a class="nav-link active" href="capacity.html">Capacity</a>
+  </nav>
+</header>
+
+<main class="main">
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-label">Total capacity</div><div class="stat-value" id="s-cap">—</div><div class="stat-sub">across all drives</div></div>
+    <div class="stat-card"><div class="stat-label">Used</div><div class="stat-value amber" id="s-used">—</div><div class="stat-sub" id="s-used-pct">—</div></div>
+    <div class="stat-card"><div class="stat-label">Free</div><div class="stat-value green" id="s-free">—</div><div class="stat-sub" id="s-free-pct">—</div></div>
+    <div class="stat-card"><div class="stat-label">Drives</div><div class="stat-value" id="s-drives">—</div><div class="stat-sub" id="s-scanned">— scanned</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="leg-item"><span class="leg-dot" style="background:#3d78c0"></span>Video</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#4a8c5a"></span>Image</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#c07830"></span>Project files</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#7060c0"></span>Audio</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#3a3a36"></span>Other</span>
+    <span class="leg-item"><span class="leg-dot" style="background:#1e1e1b;border:1px solid #3c3c36"></span>Free space</span>
+  </div>
+
+  <div class="filter-bar">
+    <span class="filter-label">Client</span>
+    <div id="client-pills"></div>
+  </div>
+
+  <div id="dashboard"></div>
+
+</main>
+
+<script>
+const SUPA_URL = "https://htkkclrenswlvcbsisqe.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0a2tjbHJlbnN3bHZjYnNpc3FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNTM4MjAsImV4cCI6MjA5MzcyOTgyMH0.YAqzxw8f3QXvjkHME9U_HA5cJCYE7Dh7tDQ290A-H10";
+const H = { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}` };
+
+const COLOR = {
+  "Video":         "#3d78c0",
+  "Image":         "#4a8c5a",
+  "Project Files": "#c07830",
+  "Audio":         "#7060c0",
+};
+const COLOR_DEFAULT = "#3a3a36";
+
+let allDrives   = [];
+let foldersByDrive = {};
+let activeClient = "All";
+
+async function load() {
+  const dash = document.getElementById("dashboard");
+  dash.innerHTML = `<div class="state"><div class="spinner"></div><p style="color:var(--text3);font-size:13px">Loading drives...</p></div>`;
+
+  const [dResp, fResp] = await Promise.all([
+    fetch(`${SUPA_URL}/rest/v1/drives?select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned&order=client.asc,drive_name.asc&limit=500`, {headers: H}),
+    fetch(`${SUPA_URL}/rest/v1/folders?select=folder_name,drive_name,folder_size_gb,content_type&limit=5000`, {headers: H}),
+  ]);
+
+  allDrives = await dResp.json();
+  const folders = await fResp.json();
+
+  // Group folders by drive
+  foldersByDrive = {};
+  folders.forEach(f => {
+    if (!foldersByDrive[f.drive_name]) foldersByDrive[f.drive_name] = [];
+    foldersByDrive[f.drive_name].push(f);
+  });
+
+  // Sort folders by size desc within each drive
+  Object.values(foldersByDrive).forEach(arr =>
+    arr.sort((a,b) => (b.folder_size_gb||0) - (a.folder_size_gb||0))
+  );
+
+  buildClientPills();
+  render();
+}
+
+function buildClientPills() {
+  const clients = ["All", ...new Set(allDrives.map(d=>d.client).filter(Boolean))].sort((a,b)=> a==="All"?-1:a.localeCompare(b));
+  const el = document.getElementById("client-pills");
+  el.innerHTML = clients.map(c =>
+    `<button class="pill${c===activeClient?" active":""}" data-c="${esc(c)}">${esc(c)}</button>`
+  ).join("");
+  el.querySelectorAll(".pill").forEach(btn => btn.addEventListener("click", () => {
+    activeClient = btn.dataset.c;
+    el.querySelectorAll(".pill").forEach(p=>p.classList.toggle("active", p.dataset.c===activeClient));
+    render();
+  }));
+}
+
+function render() {
+  const drives = activeClient === "All" ? allDrives : allDrives.filter(d => d.client === activeClient);
+
+  // Stats
+  let totalCap=0, totalFree=0, scannedCount=0;
+  drives.forEach(d => {
+    totalCap  += d.capacity_tb || 0;
+    totalFree += d.free_tb     || 0;
+    if (d.last_scanned) scannedCount++;
+  });
+  const totalUsed = totalCap - totalFree;
+  const usedPct   = totalCap ? (totalUsed/totalCap*100).toFixed(1) : 0;
+  const freePct   = totalCap ? (totalFree/totalCap*100).toFixed(1) : 0;
+
+  document.getElementById("s-cap").textContent    = fmtTB(totalCap);
+  document.getElementById("s-used").textContent   = fmtTB(totalUsed);
+  document.getElementById("s-used-pct").textContent = `${usedPct}% of total`;
+  document.getElementById("s-free").textContent   = fmtTB(totalFree);
+  document.getElementById("s-free-pct").textContent = `${freePct}% available`;
+  document.getElementById("s-drives").textContent = drives.length;
+  document.getElementById("s-scanned").textContent = `${scannedCount} scanned`;
+
+  // Group by client
+  const byClient = {};
+  drives.forEach(d => {
+    const c = d.client || "Other";
+    if (!byClient[c]) byClient[c] = [];
+    byClient[c].push(d);
+  });
+
+  const dash = document.getElementById("dashboard");
+
+  // Unscanned notice
+  const unscanned = drives.filter(d => !d.last_scanned).length;
+  let html = unscanned > 0
+    ? `<div class="unscanned-note"><b>${unscanned} drive${unscanned!==1?"s":""}</b> haven't been scanned yet — connect them and run the scanner to see folder sizes.</div>`
+    : "";
+
+  Object.entries(byClient).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([client, cDrives]) => {
+    const clientCap  = cDrives.reduce((s,d)=>s+(d.capacity_tb||0),0);
+    const clientFree = cDrives.reduce((s,d)=>s+(d.free_tb||0),0);
+    const clientUsed = clientCap - clientFree;
+    const clientPct  = clientCap ? Math.round(clientUsed/clientCap*100) : 0;
+
+    html += `<div class="client-group" id="cg-${esc(client)}">
+      <div class="client-header" onclick="toggleGroup('${esc(client)}')">
+        <span class="client-name">${esc(client)}</span>
+        <span class="client-meta">${cDrives.length} drive${cDrives.length!==1?"s":""} &nbsp;·&nbsp; ${fmtTB(clientUsed)} used of ${fmtTB(clientCap)} &nbsp;·&nbsp; ${clientPct}% full</span>
+        <span class="client-toggle"></span>
+      </div>
+      <div class="client-drives">
+        ${cDrives.map(d => driveRow(d)).join("")}
+      </div>
+    </div>`;
+  });
+
+  dash.innerHTML = html;
+  attachTooltips();
+}
+
+function driveRow(d) {
+  const cap  = d.capacity_tb || 0;
+  const free = d.free_tb     || 0;
+  const used = cap - free;
+  const folders = foldersByDrive[d.drive_name] || [];
+  const hasSize = folders.some(f => f.folder_size_gb != null);
+
+  const dotClass = d.status === "Faulty"     ? "dot-faulty"  :
+                   d.status === "In Transit"  ? "dot-transit" : "dot-active";
+  const scanned  = d.last_scanned ? timeAgo(d.last_scanned) : null;
+
+  // Build bar segments
+  let barHtml = "";
+  if (!d.last_scanned || !hasSize) {
+    barHtml = `<div class="bar-unscanned"><span class="bar-unscanned-label">not yet scanned</span></div>`;
+  } else {
+    // Sum of known folder sizes
+    const knownSum = folders.reduce((s,f)=>s+(f.folder_size_gb||0),0);
+    const knownSumTB = knownSum / 1000;
+    const capGB = cap * 1000;
+
+    // Render folder segments
+    folders.forEach(f => {
+      const sz = f.folder_size_gb || 0;
+      if (sz <= 0) return;
+      const pct = capGB > 0 ? (sz / capGB * 100) : 0;
+      if (pct < 0.1) return;
+      const color = COLOR[f.content_type] || COLOR_DEFAULT;
+      const name  = esc(f.folder_name);
+      const sizeStr = fmtGB(sz);
+      const pctStr  = pct.toFixed(1);
+      barHtml += `<div class="bar-seg" style="width:${pct}%;background:${color}"
+        data-name="${name}" data-size="${sizeStr}" data-pct="${pctStr}%"></div>`;
+    });
+
+    // Unaccounted used space (OS files, etc.)
+    const unaccounted = (used - knownSumTB) * 1000;
+    if (unaccounted > 1) {
+      const pct = capGB > 0 ? (unaccounted / capGB * 100) : 0;
+      if (pct > 0.1) {
+        barHtml += `<div class="bar-seg" style="width:${pct}%;background:#2a2a26"
+          data-name="System / unscanned" data-size="${fmtGB(unaccounted)}" data-pct="${pct.toFixed(1)}%"></div>`;
+      }
+    }
+
+    // Free space
+    const freePct = cap > 0 ? (free / cap * 100) : 0;
+    if (freePct > 0) {
+      barHtml += `<div class="bar-free" style="flex:none;width:${freePct}%"
+        data-name="Free space" data-size="${fmtGB(free*1000)}" data-pct="${freePct.toFixed(1)}%"></div>`;
+    }
+
+    // Overflow
+    if (used > cap && cap > 0) {
+      barHtml += `<div class="bar-over" style="width:${Math.min((used-cap)/cap*100,4)}%"></div>`;
+    }
+  }
+
+  const freeGB   = fmtGB(free*1000);
+  const usedPct  = cap > 0 ? Math.round((used/cap)*100) : 0;
+
+  return `<div class="drive-row">
+    <div class="drive-top">
+      <span class="status-dot ${dotClass}"></span>
+      <span class="drive-name">${esc(d.drive_name)}</span>
+      <span class="drive-custodian">${esc(d.custodian||"—")}</span>
+      <span class="drive-spacer"></span>
+      <div class="drive-stats">
+        <span class="drive-stat"><b>${fmtTB(cap)}</b> total</span>
+        <span class="drive-stat"><b>${fmtGB(used*1000)}</b> used <span style="color:var(--accent)">(${usedPct}%)</span></span>
+        <span class="drive-stat" style="color:var(--green-text)"><b>${freeGB}</b> free</span>
+        ${scanned ? `<span class="drive-stat">scanned <b>${scanned}</b></span>` : ""}
+      </div>
+    </div>
+    <div class="bar-wrap">${barHtml}</div>
+  </div>`;
+}
+
+function attachTooltips() {
+  const tip = document.getElementById("tip");
+  document.querySelectorAll(".bar-seg, .bar-free").forEach(el => {
+    el.addEventListener("mouseenter", e => {
+      const name = el.dataset.name || "";
+      const size = el.dataset.size || "";
+      const pct  = el.dataset.pct  || "";
+      tip.innerHTML = `<div class="tip-name">${name}</div><div class="tip-size">${size}</div><div class="tip-pct">${pct} of drive</div>`;
+      tip.classList.add("show");
+      moveTip(e);
+    });
+    el.addEventListener("mousemove", moveTip);
+    el.addEventListener("mouseleave", () => tip.classList.remove("show"));
+  });
+}
+
+function moveTip(e) {
+  const tip = document.getElementById("tip");
+  const x = e.clientX + 14;
+  const y = e.clientY - 10;
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  tip.style.left = (x + tw > window.innerWidth - 10 ? x - tw - 24 : x) + "px";
+  tip.style.top  = (y + th > window.innerHeight - 10 ? y - th - 4  : y) + "px";
+}
+
+function toggleGroup(client) {
+  const el = document.getElementById(`cg-${client}`);
+  if (el) el.classList.toggle("collapsed");
+}
+
+// Formatters
+function fmtTB(tb) {
+  if (!tb) return "0 TB";
+  if (tb >= 1) return tb.toFixed(1) + " TB";
+  return (tb * 1000).toFixed(0) + " GB";
+}
+function fmtGB(gb) {
+  if (!gb) return "0 GB";
+  if (gb >= 1000) return (gb/1000).toFixed(2) + " TB";
+  return gb.toFixed(0) + " GB";
+}
+function timeAgo(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if (d === 0) return "today";
+  if (d === 1) return "yesterday";
+  if (d < 30)  return `${d}d ago`;
+  if (d < 365) return `${Math.floor(d/30)}mo ago`;
+  return `${Math.floor(d/365)}y ago`;
+}
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+load();
+</script>
+</body>
+</html>
