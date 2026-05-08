@@ -254,6 +254,7 @@ async function loadDriveTypes() {
 }
 
 
+async function loadStats() {
   try {
     const dr = await fetch(`${SUPA_URL}/rest/v1/drives?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
     const fo = await fetch(`${SUPA_URL}/rest/v1/folders?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
