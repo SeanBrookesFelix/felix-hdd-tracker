@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Felix Studios — HDD Asset Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0d0b;
+  --surface:#161614;
+  --surface2:#1e1e1b;
+  --surface3:#252520;
+  --border:#2c2c28;
+  --border-h:#3c3c36;
+  --text1:#ece9e0;
+  --text2:#8a8780;
+  --text3:#4e4c48;
+  --accent:#c8a86a;
+  --accent-bg:#2a2010;
+  --green:#4a8c5a;
+  --green-bg:#0e1f12;
+  --green-text:#6db87e;
+  --amber:#c07830;
+  --amber-bg:#221608;
+  --amber-text:#d49050;
+  --red:#a83030;
+  --red-bg:#1e0c0c;
+  --red-text:#c85050;
+  --blue:#3d78c0;
+  --blue-bg:#0c1a2e;
+  --blue-text:#6898d8;
+  --purple:#7060c0;
+  --purple-bg:#140e2a;
+  --purple-text:#9880d8;
+  --r:8px;
+  --r-lg:12px;
+}
+html{font-size:15px;-webkit-font-smoothing:antialiased}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text1);min-height:100vh;line-height:1.5}
+
+/* ── Header ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{font-size:13px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--text1)}
+.logo-divider{width:1px;height:16px;background:var(--border)}
+.logo-sub{font-size:12px;color:var(--text3);letter-spacing:0.04em}
+.header-stats{display:flex;gap:8px}
+.hstat{font-size:12px;color:var(--text2);padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border)}
+.hstat b{color:var(--text1);font-weight:500}
+
+/* ── Main layout ── */
+.main{max-width:800px;margin:0 auto;padding:32px 20px 80px}
+
+/* ── Search ── */
+.search-wrap{position:relative;margin-bottom:14px}
+.search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;pointer-events:none}
+.search-input{width:100%;height:52px;padding:0 52px 0 48px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);color:var(--text1);font-family:inherit;font-size:15px;outline:none;transition:border-color .15s}
+.search-input:focus{border-color:var(--border-h)}
+.search-input::placeholder{color:var(--text3)}
+.search-clear{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:var(--surface3);border:none;color:var(--text2);cursor:pointer;width:24px;height:24px;border-radius:50%;display:none;align-items:center;justify-content:center;font-size:14px}
+.search-clear.visible{display:flex}
+.search-clear:hover{background:var(--border);color:var(--text1)}
+
+/* ── Filters ── */
+.filter-group{margin-bottom:10px}
+.filter-label{font-size:11px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0}
+.filters-wrap{margin-bottom:24px;display:flex;flex-direction:column;gap:8px}
+.pill{padding:5px 13px;border-radius:20px;font-size:12px;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .12s;white-space:nowrap}
+.pill:hover{border-color:var(--border-h);color:var(--text1)}
+.pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.pill-type.active{background:var(--blue-bg);border-color:var(--blue);color:var(--blue-text)}
+
+/* ── Results header ── */
+.results-meta{font-size:12px;color:var(--text3);margin-bottom:10px;height:16px}
+
+/* ── Result cards ── */
+.results{display:flex;flex-direction:column;gap:6px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;transition:border-color .12s;cursor:default}
+.card:hover{border-color:var(--border-h)}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.folder-name{font-size:14px;font-weight:500;line-height:1.4;flex:1;color:var(--text1)}
+.folder-name mark{background:transparent;color:var(--accent);font-weight:500}
+.badges{display:flex;gap:5px;flex-shrink:0;margin-top:2px}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:400;white-space:nowrap}
+.b-video{background:var(--blue-bg);color:var(--blue-text)}
+.b-image{background:var(--green-bg);color:var(--green-text)}
+.b-project{background:var(--amber-bg);color:var(--amber-text)}
+.b-audio{background:var(--purple-bg);color:var(--purple-text)}
+.b-dump{background:var(--surface3);color:var(--text2)}
+.b-faulty{background:var(--red-bg);color:var(--red-text)}
+.card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--text2);margin-bottom:8px}
+.meta-item{display:flex;align-items:center;gap:4px}
+.meta-item svg{flex-shrink:0;opacity:.5}
+.drive-chip{font-family:'DM Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:1px 8px;border-radius:4px;color:var(--text2)}
+.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-active{background:var(--green)}
+.dot-faulty{background:var(--red)}
+.dot-transit{background:var(--amber)}
+.dot-other{background:var(--text3)}
+.card-divider{border:none;border-top:1px solid var(--border);margin:8px 0}
+.backup-row{display:flex;align-items:center;gap:6px;font-size:12px}
+.backup-ok{color:var(--green-text)}
+.backup-missing{color:var(--amber-text)}
+.backup-drives{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2)}
+
+/* ── Empty / loading states ── */
+.state{text-align:center;padding:60px 20px;color:var(--text3)}
+.state-icon{font-size:36px;margin-bottom:12px;display:block;opacity:.4}
+.state-title{font-size:15px;color:var(--text2);margin-bottom:6px}
+.state-sub{font-size:13px}
+.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Landing (no query) ── */
+.landing{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:8px}
+.client-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;cursor:pointer;transition:all .12s}
+.client-card:hover{border-color:var(--accent);background:var(--surface2)}
+.client-card:hover .cc-name{color:var(--accent)}
+.cc-name{font-size:13px;font-weight:500;margin-bottom:4px;color:var(--text1);transition:color .12s}
+.cc-count{font-size:12px;color:var(--text3)}
+.landing-label{font-size:11px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px}
+
+/* ── Recent drives ── */
+.recent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:8px}
+.recent-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px}
+.rc-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--text1);margin-bottom:4px;font-weight:500}
+.rc-meta{font-size:11px;color:var(--text3);display:flex;gap:8px}
+.rc-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:3px;vertical-align:2px}
+
+/* ── Section heading ── */
+.section-head{font-size:11px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+
+/* ── Drive notes tooltip ── */
+.drive-notes{font-size:12px;color:var(--amber-text);background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--r);padding:6px 10px;margin-top:6px}
+
+/* ── Responsive ── */
+@media(max-width:600px){
+  .header{padding:0 14px}
+  .header-stats{display:none}
+  .main{padding:20px 14px 60px}
+  .card-top{flex-direction:column;gap:6px}
+  .badges{margin-top:0}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <span class="logo-mark">Felix Studios</span>
+    <div class="logo-divider"></div>
+    <span class="logo-sub">HDD Asset Tracker</span>
+  </div>
+  <div class="header-stats" id="header-stats">
+    <span class="hstat"><b id="stat-drives">—</b> drives</span>
+    <span class="hstat"><b id="stat-folders">—</b> folders</span>
+  </div>
+</header>
+
+<main class="main">
+  <div class="search-wrap">
+    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input class="search-input" id="search" type="text" placeholder="Search projects, shoots, clients..." autocomplete="off" spellcheck="false" />
+    <button class="search-clear" id="search-clear" aria-label="Clear search">✕</button>
+  </div>
+
+  <div class="filters-wrap">
+    <div class="filter-group">
+      <div class="filter-label">Drive type</div>
+      <div class="filters" id="type-filters">
+        <button class="pill pill-type active" data-type="All">All drives</button>
+        <button class="pill pill-type" data-type="SSD">SSDs only</button>
+        <button class="pill pill-type" data-type="HDD">HDDs only</button>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-label">Client</div>
+      <div class="filters" id="filters">
+        <button class="pill active" data-client="All">All clients</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="results-meta" id="results-meta"></div>
+  <div id="results-container"></div>
+</main>
+
+<script>
+const SUPA_URL = "https://htkkclrenswlvcbsisqe.supabase.co";
+const SUPA_KEY = "sb_publishable_EwyjFOe17AnqU_B-YSZ5mA_EIqFltq5";
+const HEADERS  = { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" };
+
+let activeClient = "All";
+let activeDriveType = "All";
+let searchQuery  = "";
+let debounceTimer;
+let allClients   = [];
+let driveTypeMap = {}; // drive_name → "SSD" | "HDD" | "Other"
+
+// ── API helpers ──────────────────────────────────────────────
+
+async function supaFetch(path, opts={}) {
+  const r = await fetch(SUPA_URL + path, { headers: HEADERS, ...opts });
+  return r.json();
+}
+
+async function rpc(fn, params) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, {
+    method: "POST", headers: HEADERS,
+    body: JSON.stringify(params)
+  });
+  return r.json();
+}
+
+// ── Startup ──────────────────────────────────────────────────
+
+async function init() {
+  // Load stats
+  const [drives, folders] = await Promise.all([
+    supaFetch("/rest/v1/drives?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
+    supaFetch("/rest/v1/folders?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
+  ]).catch(() => [{},{}]);
+
+  // Use content-range header trick via separate calls
+  loadStats();
+  loadClients();
+  loadDriveTypes();
+  showLanding();
+}
+
+async function loadDriveTypes() {
+  try {
+    const data = await supaFetch("/rest/v1/drives?select=drive_name,drive_type");
+    data.forEach(d => {
+      const t = (d.drive_type || "").toUpperCase();
+      driveTypeMap[d.drive_name] = t.includes("SSD") ? "SSD" : t.includes("HDD") ? "HDD" : "Other";
+    });
+  } catch(e) {}
+
+  // Wire type pills
+  document.querySelectorAll(".pill-type").forEach(btn => {
+    btn.addEventListener("click", () => {
+      activeDriveType = btn.dataset.type;
+      document.querySelectorAll(".pill-type").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      if (searchQuery) search(searchQuery);
+      else showLanding();
+    });
+  });
+}
+
+
+  try {
+    const dr = await fetch(`${SUPA_URL}/rest/v1/drives?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
+    const fo = await fetch(`${SUPA_URL}/rest/v1/folders?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
+    const dc = dr.headers.get("content-range")?.split("/")[1];
+    const fc = fo.headers.get("content-range")?.split("/")[1];
+    if (dc) document.getElementById("stat-drives").textContent  = parseInt(dc).toLocaleString();
+    if (fc) document.getElementById("stat-folders").textContent = parseInt(fc).toLocaleString();
+  } catch(e) {}
+}
+
+async function loadClients() {
+  try {
+    const data = await supaFetch("/rest/v1/drives?select=client&order=client.asc");
+    const unique = [...new Set(data.map(d => d.client).filter(Boolean))].sort();
+    allClients = unique;
+    const filtersEl = document.getElementById("filters");
+    filtersEl.innerHTML = `<button class="pill active" data-client="All">All clients</button>` +
+      unique.map(c => `<button class="pill" data-client="${esc(c)}">${esc(c)}</button>`).join("");
+    // Client filter pill click
+    filtersEl.querySelectorAll(".pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        activeClient = btn.dataset.client;
+        filtersEl.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        if (searchQuery) search(searchQuery);
+        else showLanding();
+      });
+    });
+  } catch(e) {}
+}
+
+function driveTypeMatch(drive_name) {
+  if (activeDriveType === "All") return true;
+  return (driveTypeMap[drive_name] || "Other") === activeDriveType;
+}
+
+
+
+async function showLanding() {
+  const container = document.getElementById("results-container");
+  document.getElementById("results-meta").textContent = "";
+  container.innerHTML = `<div class="spinner"></div>`;
+
+  try {
+    let url = "/rest/v1/drives?select=drive_name,client,custodian,status,last_scanned,capacity_tb,free_tb&order=last_scanned.desc.nullslast&limit=100";
+    const drives = await supaFetch(url);
+
+    // Group by client
+    const byClient = {};
+    drives.forEach(d => {
+      const c = d.client || "Other";
+      if (!byClient[c]) byClient[c] = [];
+      byClient[c].push(d);
+    });
+
+    // Filter by active client and drive type
+    const filteredDrives = drives.filter(d =>
+      (activeClient === "All" || d.client === activeClient) &&
+      driveTypeMatch(d.drive_name)
+    );
+
+    const recentDrives = filteredDrives.filter(d => d.last_scanned).slice(0, 12);
+
+    let html = "";
+
+    // Client overview (only when All selected)
+    if (activeClient === "All") {
+      html += `<p class="section-head">Browse by client</p><div class="landing">`;
+      Object.entries(byClient).sort((a,b) => b[1].length - a[1].length).forEach(([client, ds]) => {
+        html += `<div class="client-card" data-client="${esc(client)}">
+          <div class="cc-name">${esc(client)}</div>
+          <div class="cc-count">${ds.length} drive${ds.length!==1?'s':''}</div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Recently scanned
+    if (recentDrives.length > 0) {
+      html += `<p class="section-head" style="margin-top:28px">Recently scanned</p><div class="recent-grid">`;
+      recentDrives.forEach(d => {
+        const dotClass = d.status === "Faulty" ? "dot-faulty" : d.status === "In Transit" ? "dot-transit" : "dot-active";
+        const freeGb = d.free_tb ? (d.free_tb * 1000).toFixed(0) + " GB free" : "";
+        const scanned = d.last_scanned ? timeAgo(d.last_scanned) : "";
+        html += `<div class="recent-card">
+          <div class="rc-name">${esc(d.drive_name)}</div>
+          <div class="rc-meta">
+            <span><span class="rc-dot ${dotClass}"></span>${esc(d.custodian || "—")}</span>
+            ${freeGb ? `<span>${freeGb}</span>` : ""}
+            ${scanned ? `<span>${scanned}</span>` : ""}
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    container.innerHTML = html;
+
+    // Client card click → filter
+    container.querySelectorAll(".client-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const c = card.dataset.client;
+        activeClient = c;
+        document.querySelectorAll(".pill").forEach(p => {
+          p.classList.toggle("active", p.dataset.client === c);
+        });
+        showLanding();
+      });
+    });
+
+  } catch(e) {
+    container.innerHTML = errorState("Could not load data from database.");
+  }
+}
+
+// ── Search ────────────────────────────────────────────────────
+
+async function search(query) {
+  const container  = document.getElementById("results-container");
+  const metaEl     = document.getElementById("results-meta");
+  container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
+  metaEl.textContent  = "";
+
+  try {
+    let results = await rpc("search_folders", { query });
+
+    if (!Array.isArray(results)) {
+      container.innerHTML = errorState("Search function error — check Supabase schema update was applied.");
+      return;
+    }
+
+    // Client + drive type filter
+    if (activeClient !== "All") {
+      results = results.filter(r => r.client === activeClient);
+    }
+    if (activeDriveType !== "All") {
+      results = results.filter(r => driveTypeMatch(r.drive_name));
+    }
+
+    if (results.length === 0) {
+      container.innerHTML = emptyState(query);
+      metaEl.textContent  = "";
+      return;
+    }
+
+    metaEl.textContent = `${results.length} result${results.length!==1?"s":""} for "${query}"`;
+    container.innerHTML = results.map(r => resultCard(r, query)).join("");
+
+  } catch(e) {
+    container.innerHTML = errorState("Search failed — check your connection.");
+  }
+}
+
+// ── Card renderer ─────────────────────────────────────────────
+
+function resultCard(r, query) {
+  const badgeClass = {
+    "Video":         "b-video",
+    "Image":         "b-image",
+    "Project Files": "b-project",
+    "Audio":         "b-purple",
+    "Data Dump":     "b-dump",
+  }[r.content_type] || "b-dump";
+
+  const dotClass = r.drive_status === "Faulty"      ? "dot-faulty"  :
+                   r.drive_status === "In Transit"   ? "dot-transit" :
+                   r.drive_status === "Missing"      ? "dot-faulty"  : "dot-active";
+
+  const fmtDate = r.shoot_date ? formatDate(r.shoot_date) : "";
+  const fmtName = highlight(esc(r.folder_name), query);
+
+  // Backup status
+  const bc = parseInt(r.backup_count) || 0;
+  let backupHtml = "";
+  if (bc > 0) {
+    const drives    = r.backup_drives    || "";
+    const custodians = r.backup_custodians || "";
+    backupHtml = `<hr class="card-divider">
+      <div class="backup-row">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        <span class="backup-ok">${bc} backup${bc!==1?"s":""} found</span>
+        <span class="backup-drives">${esc(drives)}</span>
+        ${custodians ? `<span style="color:var(--text3)">with ${esc(custodians)}</span>` : ""}
+      </div>`;
+  } else {
+    backupHtml = `<hr class="card-divider">
+      <div class="backup-row">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span class="backup-missing">No backup detected</span>
+      </div>`;
+  }
+
+  // Drive notes (if any)
+  let notesHtml = "";
+  if (r.drive_notes) {
+    const firstLine = r.drive_notes.split("\n")[0].substring(0, 120);
+    notesHtml = `<div class="drive-notes">⚠ ${esc(firstLine)}</div>`;
+  }
+
+  const freeDisplay = r.free_tb ? `${(r.free_tb * 1000).toFixed(0)} GB free` : "";
+
+  return `<div class="card">
+    <div class="card-top">
+      <div class="folder-name">${fmtName}</div>
+      <div class="badges">
+        <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
+        ${r.drive_status !== "Active" ? `<span class="badge b-faulty">${esc(r.drive_status)}</span>` : ""}
+      </div>
+    </div>
+    <div class="card-meta">
+      ${fmtDate ? `<span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${fmtDate}</span>` : ""}
+      <span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        ${esc(r.client || "")}</span>
+      <span class="drive-chip">${esc(r.drive_name || "")}</span>
+      <span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ${esc(r.custodian || "")}</span>
+      <span class="meta-item">
+        <span class="status-dot ${dotClass}"></span>
+        ${esc(r.drive_status || "")}</span>
+      ${freeDisplay ? `<span class="meta-item" style="color:var(--text3)">${freeDisplay}</span>` : ""}
+    </div>
+    ${notesHtml}
+    ${backupHtml}
+  </div>`;
+}
+
+// ── States ────────────────────────────────────────────────────
+
+function emptyState(query) {
+  return `<div class="state">
+    <span class="state-icon">◎</span>
+    <p class="state-title">No results for "${esc(query)}"</p>
+    <p class="state-sub">Try different keywords or check the client filter above.</p>
+  </div>`;
+}
+
+function errorState(msg) {
+  return `<div class="state">
+    <span class="state-icon">⚠</span>
+    <p class="state-title">${esc(msg)}</p>
+  </div>`;
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function highlight(escapedText, query) {
+  if (!query) return escapedText;
+  const safe = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escapedText.replace(new RegExp(`(${safe})`, 'gi'), '<mark>$1</mark>');
+}
+
+function formatDate(d) {
+  if (!d) return "";
+  const [y,m,day] = d.split("-");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`;
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(mins / 60);
+  const days  = Math.floor(hours / 24);
+  if (mins < 2)   return "just now";
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7)   return `${days}d ago`;
+  return formatDate(iso.split("T")[0]);
+}
+
+// ── Event wiring ──────────────────────────────────────────────
+
+const searchEl = document.getElementById("search");
+const clearBtn = document.getElementById("search-clear");
+
+searchEl.addEventListener("input", e => {
+  searchQuery = e.target.value.trim();
+  clearBtn.classList.toggle("visible", searchQuery.length > 0);
+  clearTimeout(debounceTimer);
+  if (!searchQuery) {
+    document.getElementById("results-meta").textContent = "";
+    showLanding();
+    return;
+  }
+  if (searchQuery.length < 2) return;
+  debounceTimer = setTimeout(() => search(searchQuery), 300);
+});
+
+clearBtn.addEventListener("click", () => {
+  searchEl.value = "";
+  searchQuery    = "";
+  clearBtn.classList.remove("visible");
+  document.getElementById("results-meta").textContent = "";
+  showLanding();
+  searchEl.focus();
+});
+
+// ── Boot ──────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
