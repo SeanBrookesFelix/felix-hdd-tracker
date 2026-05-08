@@ -137,10 +137,17 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 /* ── Drive notes tooltip ── */
 .drive-notes{font-size:12px;color:var(--amber-text);background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--r);padding:6px 10px;margin-top:6px}
 
+/* ── Nav links ── */
+.nav-links{display:flex;gap:4px}
+.nav-link{font-size:12px;color:var(--text2);padding:5px 12px;border-radius:20px;text-decoration:none;border:1px solid transparent;transition:all .12s;white-space:nowrap}
+.nav-link:hover{color:var(--text1);border-color:var(--border)}
+.nav-link.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
 /* ── Responsive ── */
 @media(max-width:600px){
   .header{padding:0 14px}
   .header-stats{display:none}
+  .nav-links{display:none}
   .main{padding:20px 14px 60px}
   .card-top{flex-direction:column;gap:6px}
   .badges{margin-top:0}
@@ -155,6 +162,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <div class="logo-divider"></div>
     <span class="logo-sub">HDD Asset Tracker</span>
   </div>
+  <nav class="nav-links">
+    <a class="nav-link active" href="index.html">Search</a>
+    <a class="nav-link" href="capacity.html">Capacity</a>
+  </nav>
   <div class="header-stats" id="header-stats">
     <span class="hstat"><b id="stat-drives">—</b> drives</span>
     <span class="hstat"><b id="stat-folders">—</b> folders</span>
@@ -191,7 +202,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 
 <script>
 const SUPA_URL = "https://htkkclrenswlvcbsisqe.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0a2tjbHJlbnN3bHZjYnNpc3FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNTM4MjAsImV4cCI6MjA5MzcyOTgyMH0.YAqzxw8f3QXvjkHME9U_HA5cJCYE7Dh7tDQ290A-H10";
+const SUPA_KEY = "sb_publishable_EwyjFOe17AnqU_B-YSZ5mA_EIqFltq5";
 const HEADERS  = { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" };
 
 let activeClient = "All";
@@ -219,24 +230,17 @@ async function rpc(fn, params) {
 // ── Startup ──────────────────────────────────────────────────
 
 async function init() {
-  // Test connection first — show visible error if Supabase unreachable
-  try {
-    const test = await fetch(`${SUPA_URL}/rest/v1/drives?select=drive_name&limit=1`, { headers: HEADERS });
-    if (!test.ok) {
-      document.getElementById("results-container").innerHTML =
-        errorState(`Supabase connection failed (${test.status}). Check API key and project URL.`);
-      return;
-    }
-  } catch(e) {
-    document.getElementById("results-container").innerHTML =
-      errorState(`Cannot reach Supabase: ${e.message}. Check network and CORS settings.`);
-    return;
-  }
+  // Load stats
+  const [drives, folders] = await Promise.all([
+    supaFetch("/rest/v1/drives?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
+    supaFetch("/rest/v1/folders?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
+  ]).catch(() => [{},{}]);
 
+  // Use content-range header trick via separate calls
   loadStats();
   loadClients();
   loadDriveTypes();
-  showFolders();
+  showLanding();
 }
 
 async function loadDriveTypes() {
@@ -255,13 +259,12 @@ async function loadDriveTypes() {
       document.querySelectorAll(".pill-type").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       if (searchQuery) search(searchQuery);
-      else showFolders();
+      else showLanding();
     });
   });
 }
 
 
-async function loadStats() {
   try {
     const dr = await fetch(`${SUPA_URL}/rest/v1/drives?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
     const fo = await fetch(`${SUPA_URL}/rest/v1/folders?select=id`, { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} });
@@ -287,7 +290,7 @@ async function loadClients() {
         filtersEl.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
         btn.classList.add("active");
         if (searchQuery) search(searchQuery);
-        else showFolders();
+        else showLanding();
       });
     });
   } catch(e) {}
@@ -300,79 +303,81 @@ function driveTypeMatch(drive_name) {
 
 
 
-async function showFolders() {
+async function showLanding() {
   const container = document.getElementById("results-container");
-  const metaEl    = document.getElementById("results-meta");
-  container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
-  metaEl.textContent  = "";
+  document.getElementById("results-meta").textContent = "";
+  container.innerHTML = `<div class="spinner"></div>`;
 
   try {
-    let url = "/rest/v1/folders?select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name&order=shoot_date.desc.nullslast&limit=500";
-    if (activeClient !== "All") {
-      url += `&client=eq.${encodeURIComponent(activeClient)}`;
+    let url = "/rest/v1/drives?select=drive_name,client,custodian,status,last_scanned,capacity_tb,free_tb&order=last_scanned.desc.nullslast&limit=100";
+    const drives = await supaFetch(url);
+
+    // Group by client
+    const byClient = {};
+    drives.forEach(d => {
+      const c = d.client || "Other";
+      if (!byClient[c]) byClient[c] = [];
+      byClient[c].push(d);
+    });
+
+    // Filter by active client and drive type
+    const filteredDrives = drives.filter(d =>
+      (activeClient === "All" || d.client === activeClient) &&
+      driveTypeMatch(d.drive_name)
+    );
+
+    const recentDrives = filteredDrives.filter(d => d.last_scanned).slice(0, 12);
+
+    let html = "";
+
+    // Client overview (only when All selected)
+    if (activeClient === "All") {
+      html += `<p class="section-head">Browse by client</p><div class="landing">`;
+      Object.entries(byClient).sort((a,b) => b[1].length - a[1].length).forEach(([client, ds]) => {
+        html += `<div class="client-card" data-client="${esc(client)}">
+          <div class="cc-name">${esc(client)}</div>
+          <div class="cc-count">${ds.length} drive${ds.length!==1?'s':''}</div>
+        </div>`;
+      });
+      html += `</div>`;
     }
 
-    const data = await supaFetch(url);
-    const filtered = data.filter(r => driveTypeMatch(r.drive_name));
-
-    if (!filtered.length) {
-      container.innerHTML = `<div class="state">
-        <span class="state-icon">◎</span>
-        <p class="state-title">No folders found</p>
-        <p class="state-sub">Try a different client or drive type filter.</p>
-      </div>`;
-      return;
+    // Recently scanned
+    if (recentDrives.length > 0) {
+      html += `<p class="section-head" style="margin-top:28px">Recently scanned</p><div class="recent-grid">`;
+      recentDrives.forEach(d => {
+        const dotClass = d.status === "Faulty" ? "dot-faulty" : d.status === "In Transit" ? "dot-transit" : "dot-active";
+        const freeGb = d.free_tb ? (d.free_tb * 1000).toFixed(0) + " GB free" : "";
+        const scanned = d.last_scanned ? timeAgo(d.last_scanned) : "";
+        html += `<div class="recent-card">
+          <div class="rc-name">${esc(d.drive_name)}</div>
+          <div class="rc-meta">
+            <span><span class="rc-dot ${dotClass}"></span>${esc(d.custodian || "—")}</span>
+            ${freeGb ? `<span>${freeGb}</span>` : ""}
+            ${scanned ? `<span>${scanned}</span>` : ""}
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
     }
 
-    const clientLabel = activeClient === "All" ? "all clients" : activeClient;
-    const typeLabel   = activeDriveType === "All" ? "" : ` · ${activeDriveType}s only`;
-    metaEl.textContent = `${filtered.length} folders · ${clientLabel}${typeLabel}`;
-    container.innerHTML = `<div class="results">${filtered.map(r => folderCard(r)).join("")}</div>`;
+    container.innerHTML = html;
+
+    // Client card click → filter
+    container.querySelectorAll(".client-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const c = card.dataset.client;
+        activeClient = c;
+        document.querySelectorAll(".pill").forEach(p => {
+          p.classList.toggle("active", p.dataset.client === c);
+        });
+        showLanding();
+      });
+    });
 
   } catch(e) {
-    container.innerHTML = errorState("Could not load folders.");
+    container.innerHTML = errorState("Could not load data from database.");
   }
-}
-
-function folderCard(r) {
-  const badgeClass = {
-    "Video":         "b-video",
-    "Image":         "b-image",
-    "Project Files": "b-project",
-    "Audio":         "b-audio",
-    "Data Dump":     "b-dump",
-  }[r.content_type] || "b-dump";
-
-  const dotClass = r.drive_status === "Faulty"    ? "dot-faulty"  :
-                   r.drive_status === "In Transit" ? "dot-transit" :
-                   r.drive_status === "Missing"    ? "dot-faulty"  : "dot-active";
-
-  const fmtDate = r.shoot_date ? formatDate(r.shoot_date) : "";
-
-  return `<div class="card">
-    <div class="card-top">
-      <div class="folder-name">${esc(r.folder_name)}</div>
-      <div class="badges">
-        <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
-        ${r.drive_status !== "Active" ? `<span class="badge b-faulty">${esc(r.drive_status)}</span>` : ""}
-      </div>
-    </div>
-    <div class="card-meta">
-      ${fmtDate ? `<span class="meta-item">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        ${fmtDate}</span>` : ""}
-      <span class="meta-item">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        ${esc(r.client || "")}</span>
-      <span class="drive-chip">${esc(r.drive_name || "")}</span>
-      <span class="meta-item">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        ${esc(r.custodian || "")}</span>
-      <span class="meta-item">
-        <span class="status-dot ${dotClass}"></span>
-        ${esc(r.drive_status || "")}</span>
-    </div>
-  </div>`;
 }
 
 // ── Search ────────────────────────────────────────────────────
@@ -549,7 +554,7 @@ searchEl.addEventListener("input", e => {
   clearTimeout(debounceTimer);
   if (!searchQuery) {
     document.getElementById("results-meta").textContent = "";
-    showFolders();
+    showLanding();
     return;
   }
   if (searchQuery.length < 2) return;
@@ -561,7 +566,7 @@ clearBtn.addEventListener("click", () => {
   searchQuery    = "";
   clearBtn.classList.remove("visible");
   document.getElementById("results-meta").textContent = "";
-  showFolders();
+  showLanding();
   searchEl.focus();
 });
 
