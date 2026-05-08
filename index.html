@@ -219,13 +219,20 @@ async function rpc(fn, params) {
 // ── Startup ──────────────────────────────────────────────────
 
 async function init() {
-  // Load stats
-  const [drives, folders] = await Promise.all([
-    supaFetch("/rest/v1/drives?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
-    supaFetch("/rest/v1/folders?select=id&head=true", { method: "HEAD", headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }),
-  ]).catch(() => [{},{}]);
+  // Test connection first — show visible error if Supabase unreachable
+  try {
+    const test = await fetch(`${SUPA_URL}/rest/v1/drives?select=drive_name&limit=1`, { headers: HEADERS });
+    if (!test.ok) {
+      document.getElementById("results-container").innerHTML =
+        errorState(`Supabase connection failed (${test.status}). Check API key and project URL.`);
+      return;
+    }
+  } catch(e) {
+    document.getElementById("results-container").innerHTML =
+      errorState(`Cannot reach Supabase: ${e.message}. Check network and CORS settings.`);
+    return;
+  }
 
-  // Use content-range header trick via separate calls
   loadStats();
   loadClients();
   loadDriveTypes();
