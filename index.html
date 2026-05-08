@@ -236,7 +236,7 @@ async function init() {
   loadStats();
   loadClients();
   loadDriveTypes();
-  showLanding();
+  showFolders();
 }
 
 async function loadDriveTypes() {
@@ -255,7 +255,7 @@ async function loadDriveTypes() {
       document.querySelectorAll(".pill-type").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       if (searchQuery) search(searchQuery);
-      else showLanding();
+      else showFolders();
     });
   });
 }
@@ -287,7 +287,7 @@ async function loadClients() {
         filtersEl.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
         btn.classList.add("active");
         if (searchQuery) search(searchQuery);
-        else showLanding();
+        else showFolders();
       });
     });
   } catch(e) {}
@@ -300,81 +300,79 @@ function driveTypeMatch(drive_name) {
 
 
 
-async function showLanding() {
+async function showFolders() {
   const container = document.getElementById("results-container");
-  document.getElementById("results-meta").textContent = "";
-  container.innerHTML = `<div class="spinner"></div>`;
+  const metaEl    = document.getElementById("results-meta");
+  container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
+  metaEl.textContent  = "";
 
   try {
-    let url = "/rest/v1/drives?select=drive_name,client,custodian,status,last_scanned,capacity_tb,free_tb&order=last_scanned.desc.nullslast&limit=100";
-    const drives = await supaFetch(url);
-
-    // Group by client
-    const byClient = {};
-    drives.forEach(d => {
-      const c = d.client || "Other";
-      if (!byClient[c]) byClient[c] = [];
-      byClient[c].push(d);
-    });
-
-    // Filter by active client and drive type
-    const filteredDrives = drives.filter(d =>
-      (activeClient === "All" || d.client === activeClient) &&
-      driveTypeMatch(d.drive_name)
-    );
-
-    const recentDrives = filteredDrives.filter(d => d.last_scanned).slice(0, 12);
-
-    let html = "";
-
-    // Client overview (only when All selected)
-    if (activeClient === "All") {
-      html += `<p class="section-head">Browse by client</p><div class="landing">`;
-      Object.entries(byClient).sort((a,b) => b[1].length - a[1].length).forEach(([client, ds]) => {
-        html += `<div class="client-card" data-client="${esc(client)}">
-          <div class="cc-name">${esc(client)}</div>
-          <div class="cc-count">${ds.length} drive${ds.length!==1?'s':''}</div>
-        </div>`;
-      });
-      html += `</div>`;
+    let url = "/rest/v1/folders?select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name&order=shoot_date.desc.nullslast&limit=500";
+    if (activeClient !== "All") {
+      url += `&client=eq.${encodeURIComponent(activeClient)}`;
     }
 
-    // Recently scanned
-    if (recentDrives.length > 0) {
-      html += `<p class="section-head" style="margin-top:28px">Recently scanned</p><div class="recent-grid">`;
-      recentDrives.forEach(d => {
-        const dotClass = d.status === "Faulty" ? "dot-faulty" : d.status === "In Transit" ? "dot-transit" : "dot-active";
-        const freeGb = d.free_tb ? (d.free_tb * 1000).toFixed(0) + " GB free" : "";
-        const scanned = d.last_scanned ? timeAgo(d.last_scanned) : "";
-        html += `<div class="recent-card">
-          <div class="rc-name">${esc(d.drive_name)}</div>
-          <div class="rc-meta">
-            <span><span class="rc-dot ${dotClass}"></span>${esc(d.custodian || "—")}</span>
-            ${freeGb ? `<span>${freeGb}</span>` : ""}
-            ${scanned ? `<span>${scanned}</span>` : ""}
-          </div>
-        </div>`;
-      });
-      html += `</div>`;
+    const data = await supaFetch(url);
+    const filtered = data.filter(r => driveTypeMatch(r.drive_name));
+
+    if (!filtered.length) {
+      container.innerHTML = `<div class="state">
+        <span class="state-icon">◎</span>
+        <p class="state-title">No folders found</p>
+        <p class="state-sub">Try a different client or drive type filter.</p>
+      </div>`;
+      return;
     }
 
-    container.innerHTML = html;
-
-    // Client card click → filter
-    container.querySelectorAll(".client-card").forEach(card => {
-      card.addEventListener("click", () => {
-        const c = card.dataset.client;
-        activeClient = c;
-        document.querySelectorAll(".pill").forEach(p => {
-          p.classList.toggle("active", p.dataset.client === c);
-        });
-        showLanding();
-      });
-    });
+    const clientLabel = activeClient === "All" ? "all clients" : activeClient;
+    const typeLabel   = activeDriveType === "All" ? "" : ` · ${activeDriveType}s only`;
+    metaEl.textContent = `${filtered.length} folders · ${clientLabel}${typeLabel}`;
+    container.innerHTML = `<div class="results">${filtered.map(r => folderCard(r)).join("")}</div>`;
 
   } catch(e) {
-    container.innerHTML = errorState("Could not load data from database.");
+    container.innerHTML = errorState("Could not load folders.");
   }
+}
+
+function folderCard(r) {
+  const badgeClass = {
+    "Video":         "b-video",
+    "Image":         "b-image",
+    "Project Files": "b-project",
+    "Audio":         "b-audio",
+    "Data Dump":     "b-dump",
+  }[r.content_type] || "b-dump";
+
+  const dotClass = r.drive_status === "Faulty"    ? "dot-faulty"  :
+                   r.drive_status === "In Transit" ? "dot-transit" :
+                   r.drive_status === "Missing"    ? "dot-faulty"  : "dot-active";
+
+  const fmtDate = r.shoot_date ? formatDate(r.shoot_date) : "";
+
+  return `<div class="card">
+    <div class="card-top">
+      <div class="folder-name">${esc(r.folder_name)}</div>
+      <div class="badges">
+        <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
+        ${r.drive_status !== "Active" ? `<span class="badge b-faulty">${esc(r.drive_status)}</span>` : ""}
+      </div>
+    </div>
+    <div class="card-meta">
+      ${fmtDate ? `<span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${fmtDate}</span>` : ""}
+      <span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        ${esc(r.client || "")}</span>
+      <span class="drive-chip">${esc(r.drive_name || "")}</span>
+      <span class="meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ${esc(r.custodian || "")}</span>
+      <span class="meta-item">
+        <span class="status-dot ${dotClass}"></span>
+        ${esc(r.drive_status || "")}</span>
+    </div>
+  </div>`;
 }
 
 // ── Search ────────────────────────────────────────────────────
@@ -551,7 +549,7 @@ searchEl.addEventListener("input", e => {
   clearTimeout(debounceTimer);
   if (!searchQuery) {
     document.getElementById("results-meta").textContent = "";
-    showLanding();
+    showFolders();
     return;
   }
   if (searchQuery.length < 2) return;
@@ -563,7 +561,7 @@ clearBtn.addEventListener("click", () => {
   searchQuery    = "";
   clearBtn.classList.remove("visible");
   document.getElementById("results-meta").textContent = "";
-  showLanding();
+  showFolders();
   searchEl.focus();
 });
 
