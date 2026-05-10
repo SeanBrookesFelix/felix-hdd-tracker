@@ -460,35 +460,63 @@ async function showDriveSearch(driveNames, query) {
 
   try {
     const inList = driveNames.map(n => `"${n}"`).join(",");
-    const data = await supaFetch(
-      `/rest/v1/folders?drive_name=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`
-    );
 
-    if (!data.length) {
-      container.innerHTML = emptyState(query);
+    // Fetch folders AND drive metadata in parallel
+    const [folderData, metaData] = await Promise.all([
+      supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`),
+      supaFetch(`/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned,custodian,status`)
+    ]);
+
+    // Build drive metadata map
+    const driveMeta = {};
+    metaData.forEach(d => { driveMeta[d.drive_name] = d; });
+
+    // If drive exists in DB but has no folders — show drive card with notice
+    if (!folderData.length) {
+      if (metaData.length) {
+        const driveLabel = driveNames.length === 1 ? driveNames[0] : `${driveNames.length} drives matching "${query}"`;
+        metaEl.textContent = `${metaData.length} drive${metaData.length !== 1 ? "s" : ""} found · no folders synced yet`;
+        container.innerHTML = metaData.map(d => {
+          const dotClass = d.status === "Faulty" ? "dot-faulty" : d.status === "In Transit" ? "dot-transit" : "dot-active";
+          const freeStr  = d.free_tb != null ? `${(d.free_tb * 1000).toFixed(0)} GB free` : "";
+          const capStr   = d.capacity_tb ? `${d.capacity_tb} TB` : "";
+          const scanned  = d.last_scanned ? `scanned ${timeAgo(d.last_scanned)}` : "never scanned";
+          return `<div class="drive-group">
+            <div class="drive-group-header">
+              <span class="dg-name">${esc(d.drive_name)}</span>
+              <div class="dg-divider"></div>
+              <div class="dg-meta">
+                <span class="meta-item"><span class="status-dot ${dotClass}"></span>${esc(d.status || "Active")}</span>
+                ${d.custodian ? `<span class="meta-item"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${esc(d.custodian)}</span>` : ""}
+                ${capStr ? `<span class="dg-free">${capStr}${freeStr ? ` · ${freeStr}` : ""}</span>` : ""}
+                <span class="dg-free">${scanned}</span>
+              </div>
+              <span class="dg-count">0 folders</span>
+            </div>
+            <div class="drive-group-folders">
+              <div class="folder-row" style="color:var(--text3);font-size:13px;justify-content:center;padding:16px">
+                No folders found — drive may be empty or needs Full Disk Access permission in System Settings
+              </div>
+            </div>
+          </div>`;
+        }).join("");
+      } else {
+        container.innerHTML = emptyState(query);
+      }
       return;
     }
 
-    // Group by drive
+    // Group folders by drive
     const grouped = {};
-    data.forEach(f => {
+    folderData.forEach(f => {
       if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
       grouped[f.drive_name].push(f);
     });
 
-    // Fetch drive metadata
-    let driveMeta = {};
-    try {
-      const metaData = await supaFetch(
-        `/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned`
-      );
-      metaData.forEach(d => { driveMeta[d.drive_name] = d; });
-    } catch(e) {}
-
     const driveLabel = driveNames.length === 1
       ? driveNames[0]
       : `${driveNames.length} drives matching "${query}"`;
-    metaEl.textContent = `${data.length} folders on ${driveLabel}`;
+    metaEl.textContent = `${folderData.length} folders on ${driveLabel}`;
 
     container.innerHTML = Object.entries(grouped).map(([driveName, folders]) =>
       driveGroup(driveName, folders, driveMeta[driveName] || {}, query)
