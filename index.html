@@ -218,7 +218,8 @@ let activeDriveType = "All";
 let searchQuery  = "";
 let debounceTimer;
 let allClients   = [];
-let driveTypeMap = {}; // drive_name → "SSD" | "HDD" | "Other"
+let driveTypeMap = {};
+let allDriveNames = [];
 
 // ── API helpers ──────────────────────────────────────────────
 
@@ -265,6 +266,7 @@ async function loadDriveTypes() {
       const t = (d.drive_type || "").toUpperCase();
       driveTypeMap[d.drive_name] = t.includes("SSD") ? "SSD" : t.includes("HDD") ? "HDD" : "Other";
     });
+    allDriveNames = Object.keys(driveTypeMap);
   } catch(e) {}
 
   // Wire type pills
@@ -378,7 +380,7 @@ async function showFolders() {
   }
 }
 
-function driveGroup(driveName, folders, meta) {
+function driveGroup(driveName, folders, meta, query = null) {
   // Use first folder for denormalized drive fields
   const first     = folders[0];
   const custodian = first.custodian || "";
@@ -405,7 +407,7 @@ function driveGroup(driveName, folders, meta) {
     <span class="dg-count">${folders.length} folder${folders.length !== 1 ? "s" : ""}</span>
   </div>`;
 
-  const rows = folders.map(f => folderRow(f)).join("");
+  const rows = folders.map(f => folderRow(f, query)).join("");
 
   return `<div class="drive-group">${header}<div class="drive-group-folders">${rows}</div></div>`;
 }
@@ -433,7 +435,71 @@ function folderRow(r, query) {
 
 // ── Search ────────────────────────────────────────────────────
 
+function findMatchingDrives(query) {
+  const q = query.toLowerCase().trim();
+  if (q.length < 2) return [];
+  return allDriveNames.filter(name => name.toLowerCase().includes(q));
+}
+
 async function search(query) {
+  // Route: if query matches known drive names → show drive-grouped view
+  const matchedDrives = findMatchingDrives(query);
+  if (matchedDrives.length > 0) {
+    await showDriveSearch(matchedDrives, query);
+    return;
+  }
+  // Otherwise → fuzzy folder search
+  await fuzzySearch(query);
+}
+
+async function showDriveSearch(driveNames, query) {
+  const container = document.getElementById("results-container");
+  const metaEl    = document.getElementById("results-meta");
+  container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
+  metaEl.textContent  = "";
+
+  try {
+    const inList = driveNames.map(n => `"${n}"`).join(",");
+    const data = await supaFetch(
+      `/rest/v1/folders?drive_name=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`
+    );
+
+    if (!data.length) {
+      container.innerHTML = emptyState(query);
+      return;
+    }
+
+    // Group by drive
+    const grouped = {};
+    data.forEach(f => {
+      if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
+      grouped[f.drive_name].push(f);
+    });
+
+    // Fetch drive metadata
+    let driveMeta = {};
+    try {
+      const metaData = await supaFetch(
+        `/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned`
+      );
+      metaData.forEach(d => { driveMeta[d.drive_name] = d; });
+    } catch(e) {}
+
+    const driveLabel = driveNames.length === 1
+      ? driveNames[0]
+      : `${driveNames.length} drives matching "${query}"`;
+    metaEl.textContent = `${data.length} folders on ${driveLabel}`;
+
+    container.innerHTML = Object.entries(grouped).map(([driveName, folders]) =>
+      driveGroup(driveName, folders, driveMeta[driveName] || {}, query)
+    ).join("");
+
+  } catch(e) {
+    container.innerHTML = errorState("Drive search failed.");
+  }
+}
+
+async function fuzzySearch(query) {
   const container  = document.getElementById("results-container");
   const metaEl     = document.getElementById("results-meta");
   container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
