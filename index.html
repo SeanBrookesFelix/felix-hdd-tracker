@@ -455,6 +455,7 @@ async function showCapacity() {
 }
 
 
+async function loadDriveTypes() {
   try {
     const data = await supaFetch("/rest/v1/drives?select=drive_name,drive_type");
     data.forEach(d => {
