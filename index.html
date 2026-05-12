@@ -481,32 +481,6 @@ async function showCapacity() {
         </div>`;
       });
 
-    html += `</div>
-    <p class="cap-table-head">Storage by custodian</p>
-    <div class="cap-rows">`;
-
-    Object.entries(byCust)
-      .sort((a, b) => b[1].cap - a[1].cap)
-      .forEach(([cust, data]) => {
-        const used = data.cap - data.free;
-        const pct  = data.cap > 0 ? (used / data.cap * 100) : 0;
-        const barClass = pct > 90 ? "cap-bar-crit" : pct > 75 ? "cap-bar-warn" : "cap-bar-used";
-        html += `<div class="cap-row">
-          <div class="cap-row-top">
-            <span class="cap-row-name">${esc(cust)}</span>
-            <span class="cap-row-drives">${data.drives} drive${data.drives!==1?"s":""}</span>
-          </div>
-          <div class="cap-bar-track">
-            <div class="cap-bar-fill ${barClass}" style="width:${Math.min(pct,100).toFixed(1)}%"></div>
-          </div>
-          <div class="cap-row-meta">
-            <span><b>${fmt(used)}</b> used</span>
-            <span><b>${fmt(data.free)}</b> free</span>
-            <span><b>${fmt(data.cap)}</b> total</span>
-          </div>
-        </div>`;
-      });
-
     html += `</div>`;
     container.innerHTML = html;
     capLoaded = true;
