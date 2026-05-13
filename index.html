@@ -191,6 +191,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .cap-row-meta{display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--text3)}
 .cap-row-meta b{color:var(--text2);font-weight:500}
 
+/* ── Pending drives ── */
+.pending-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--red);color:#fff;font-size:10px;font-weight:500;border-radius:20px;min-width:16px;height:16px;padding:0 4px;margin-left:4px;vertical-align:1px}
+.pending-cards{display:flex;flex-direction:column;gap:10px}
+.pending-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px}
+.pending-drive-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--text1)}
+.pending-meta{display:flex;gap:14px;font-size:12px;color:var(--text2);margin:8px 0 14px;flex-wrap:wrap}
+.pending-actions{display:flex;gap:8px}
+.btn-approve{padding:7px 16px;border-radius:var(--r);font-size:13px;font-family:inherit;border:1px solid var(--green);background:var(--green-bg);color:var(--green-text);cursor:pointer;transition:all .12s;font-weight:500}
+.btn-approve:hover:not(:disabled){background:var(--green);color:#fff}
+.btn-ignore{padding:7px 16px;border-radius:var(--r);font-size:13px;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .12s}
+.btn-ignore:hover:not(:disabled){border-color:var(--red);color:var(--red-text);background:var(--red-bg)}
+.btn-approve:disabled,.btn-ignore:disabled{opacity:.5;cursor:default}
+
 /* ── Responsive ── */
 @media(max-width:600px){
   .header{padding:0 14px}
@@ -215,6 +228,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <nav class="nav-links">
     <button class="nav-link active" id="tab-search">Search</button>
     <button class="nav-link" id="tab-capacity">Capacity</button>
+    <button class="nav-link" id="tab-pending">Pending<span class="pending-badge" id="pending-badge" style="display:none"></span></button>
     <div class="nav-sep"></div>
     <button class="scan-btn" id="scan-now-btn" onclick="requestScan()">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
@@ -276,6 +290,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <div class="cap-section" id="cap-section">
     <div id="cap-container"><div class="spinner" style="margin-top:60px"></div></div>
   </div>
+
+  <!-- ── Pending drives view ── -->
+  <div class="cap-section" id="pending-section">
+    <div id="pending-container"><div class="spinner" style="margin-top:60px"></div></div>
+  </div>
 </main>
 
 <script>
@@ -328,6 +347,7 @@ async function init() {
   loadClients();
   loadDriveTypes();
   setupContentFilters();
+  loadPendingBadge();
   showFolders();
 }
 
@@ -336,16 +356,30 @@ async function init() {
 document.getElementById("tab-search").addEventListener("click", () => {
   document.getElementById("tab-search").classList.add("active");
   document.getElementById("tab-capacity").classList.remove("active");
+  document.getElementById("tab-pending").classList.remove("active");
   document.getElementById("search-section").classList.remove("hidden");
   document.getElementById("cap-section").classList.remove("visible");
+  document.getElementById("pending-section").classList.remove("visible");
 });
 
 document.getElementById("tab-capacity").addEventListener("click", () => {
   document.getElementById("tab-capacity").classList.add("active");
   document.getElementById("tab-search").classList.remove("active");
+  document.getElementById("tab-pending").classList.remove("active");
   document.getElementById("search-section").classList.add("hidden");
   document.getElementById("cap-section").classList.add("visible");
+  document.getElementById("pending-section").classList.remove("visible");
   showCapacity();
+});
+
+document.getElementById("tab-pending").addEventListener("click", () => {
+  document.getElementById("tab-pending").classList.add("active");
+  document.getElementById("tab-search").classList.remove("active");
+  document.getElementById("tab-capacity").classList.remove("active");
+  document.getElementById("search-section").classList.add("hidden");
+  document.getElementById("cap-section").classList.remove("visible");
+  document.getElementById("pending-section").classList.add("visible");
+  showPending();
 });
 
 // ── Scan Now ──────────────────────────────────────────────────
@@ -383,6 +417,110 @@ async function requestScan() {
 }
 
 
+
+// ── Pending drives ────────────────────────────────────────────
+
+async function loadPendingBadge() {
+  try {
+    const resp = await fetch(
+      `${SUPA_URL}/rest/v1/pending_drives?status=eq.pending&select=id`,
+      { headers: {...HEADERS, "Prefer": "count=exact", "Range": "0-0"} }
+    );
+    const count = parseInt(resp.headers.get("content-range")?.split("/")[1] || "0");
+    const badge = document.getElementById("pending-badge");
+    if (badge) {
+      badge.textContent = count;
+      badge.style.display = count > 0 ? "inline-flex" : "none";
+    }
+  } catch(e) {}
+}
+
+async function showPending() {
+  const container = document.getElementById("pending-container");
+  container.innerHTML = `<div class="spinner" style="margin-top:60px"></div>`;
+  try {
+    const data = await supaFetch("/rest/v1/pending_drives?status=eq.pending&order=submitted_at.asc");
+    if (!data.length) {
+      container.innerHTML = `<div class="state">
+        <span class="state-icon">✓</span>
+        <p class="state-title" style="color:var(--green-text)">No pending drives</p>
+        <p class="state-sub">All connected drives have been reviewed.</p>
+      </div>`;
+      return;
+    }
+    container.innerHTML = `
+      <p style="font-size:11px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px">
+        ${data.length} drive${data.length!==1?"s":""} awaiting approval
+      </p>
+      <div class="pending-cards">${data.map(d => pendingCard(d)).join("")}</div>`;
+    container.querySelectorAll(".btn-approve").forEach(btn => {
+      btn.addEventListener("click", () => approveDrive(btn.dataset.id, btn.dataset.name));
+    });
+    container.querySelectorAll(".btn-ignore").forEach(btn => {
+      btn.addEventListener("click", () => ignoreDrive(btn.dataset.id, btn.dataset.name));
+    });
+  } catch(e) {
+    container.innerHTML = errorState("Could not load pending drives.");
+  }
+}
+
+function pendingCard(d) {
+  const cap  = d.capacity_tb ? `${d.capacity_tb} TB` : "Unknown size";
+  const free = d.free_tb != null ? ` · ${(d.free_tb*1000).toFixed(0)} GB free` : "";
+  const when = d.submitted_at ? timeAgo(d.submitted_at) : "";
+  return `<div class="pending-card">
+    <div class="pending-drive-name">${esc(d.drive_name)}</div>
+    <div class="pending-meta">
+      ${d.custodian ? `<span class="meta-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ${esc(d.custodian)}</span>` : ""}
+      <span class="meta-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+        ${cap}${free}</span>
+      ${when ? `<span style="color:var(--text3)">Submitted ${when}</span>` : ""}
+    </div>
+    <div class="pending-actions">
+      <button class="btn-approve" data-id="${d.id}" data-name="${esc(d.drive_name)}">✓ Approve — add to Felix database</button>
+      <button class="btn-ignore"  data-id="${d.id}" data-name="${esc(d.drive_name)}">Ignore — not a Felix drive</button>
+    </div>
+  </div>`;
+}
+
+async function approveDrive(id, driveName) {
+  const btnA = document.querySelector(`.btn-approve[data-id="${id}"]`);
+  const btnI = document.querySelector(`.btn-ignore[data-id="${id}"]`);
+  if (btnA) { btnA.disabled = true; btnA.textContent = "Approving..."; }
+  if (btnI)   btnI.disabled = true;
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/pending_drives?id=eq.${id}`, {
+      method: "PATCH", headers: HEADERS,
+      body: JSON.stringify({ status:"approved", decided_at: new Date().toISOString(), decided_by:"admin" })
+    });
+    if (btnA) btnA.textContent = "✓ Approved — scanner will register within 60s";
+    setTimeout(() => { showPending(); loadPendingBadge(); }, 1500);
+  } catch(e) {
+    if (btnA) { btnA.disabled = false; btnA.textContent = "✓ Approve"; }
+    if (btnI)   btnI.disabled = false;
+  }
+}
+
+async function ignoreDrive(id, driveName) {
+  const btnI = document.querySelector(`.btn-ignore[data-id="${id}"]`);
+  const btnA = document.querySelector(`.btn-approve[data-id="${id}"]`);
+  if (btnI) { btnI.disabled = true; btnI.textContent = "Ignoring..."; }
+  if (btnA)   btnA.disabled = true;
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/pending_drives?id=eq.${id}`, {
+      method: "PATCH", headers: HEADERS,
+      body: JSON.stringify({ status:"ignored", decided_at: new Date().toISOString(), decided_by:"admin" })
+    });
+    if (btnI) btnI.textContent = "Ignored — scanner will add to ignore list within 60s";
+    setTimeout(() => { showPending(); loadPendingBadge(); }, 1500);
+  } catch(e) {
+    if (btnI) { btnI.disabled = false; btnI.textContent = "Ignore"; }
+    if (btnA)   btnA.disabled = false;
+  }
+}
 
 let capLoaded = false;
 
