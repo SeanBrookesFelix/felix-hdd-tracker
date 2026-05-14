@@ -776,10 +776,9 @@ async function showFolders() {
 }
 
 function driveGroup(driveName, folders, meta, query = null) {
-  // Use first folder for denormalized drive fields
-  const first     = folders[0];
-  const custodian = first.custodian || "";
-  const status    = first.drive_status || "Active";
+  // Use drive metadata for drive-level fields — folders array may be empty
+  const custodian = meta.custodian || (folders[0] && folders[0].custodian) || "";
+  const status    = meta.status    || (folders[0] && folders[0].drive_status) || "Active";
   const dotClass  = status === "Faulty" ? "dot-faulty" : status === "In Transit" ? "dot-transit" : status === "Missing" ? "dot-faulty" : "dot-active";
 
   const capacityStr = meta.capacity_tb ? `${meta.capacity_tb} TB` : "";
