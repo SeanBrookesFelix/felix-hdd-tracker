@@ -308,6 +308,7 @@ let activeContentType = "All";
 let searchQuery  = "";
 let debounceTimer;
 let allClients   = [];
+let allCustodians = [];
 let driveTypeMap = {};
 let allDriveNames = [];
 
@@ -346,6 +347,7 @@ async function init() {
   loadStats();
   loadClients();
   loadDriveTypes();
+  loadCustodians();
   setupContentFilters();
   loadPendingBadge();
   showFolders();
@@ -697,6 +699,14 @@ function setupContentFilters() {
 }
 
 
+async function loadCustodians() {
+  try {
+    const data = await supaFetch("/rest/v1/drives?select=custodian&order=custodian.asc");
+    allCustodians = [...new Set(data.map(d => d.custodian).filter(Boolean))].sort();
+  } catch(e) {}
+}
+
+
 function driveTypeMatch(drive_name) {
   if (activeDriveType === "All") return true;
   return (driveTypeMap[drive_name] || "Other") === activeDriveType;
@@ -828,15 +838,76 @@ function findMatchingDrives(query) {
   return allDriveNames.filter(name => name.toLowerCase().includes(q));
 }
 
+function findMatchingCustodians(query) {
+  const q = query.toLowerCase().trim();
+  if (q.length < 2) return [];
+  return allCustodians.filter(name => name.toLowerCase().includes(q));
+}
+
 async function search(query) {
-  // Route: if query matches known drive names → show drive-grouped view
+  // 1. Drive name match → drive-grouped view
   const matchedDrives = findMatchingDrives(query);
   if (matchedDrives.length > 0) {
     await showDriveSearch(matchedDrives, query);
     return;
   }
-  // Otherwise → fuzzy folder search
+  // 2. Custodian name match → show all drives held by that person
+  const matchedCustodians = findMatchingCustodians(query);
+  if (matchedCustodians.length > 0) {
+    await showCustodianSearch(matchedCustodians, query);
+    return;
+  }
+  // 3. Fuzzy folder/client search
   await fuzzySearch(query);
+}
+
+async function showCustodianSearch(custodianNames, query) {
+  const container = document.getElementById("results-container");
+  const metaEl    = document.getElementById("results-meta");
+  container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
+  metaEl.textContent  = "";
+
+  try {
+    const inList = custodianNames.map(n => `"${n}"`).join(",");
+
+    // Fetch all drives held by these custodians + their folders in parallel
+    const [drives, folderData] = await Promise.all([
+      supaFetch(`/rest/v1/drives?custodian=in.(${inList})&select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned&order=last_scanned.desc.nullslast`),
+      supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb&order=shoot_date.desc.nullslast&limit=500`)
+    ]);
+
+    // Apply drive type filter
+    const filteredDrives = drives.filter(d => driveTypeMatch(d.drive_name));
+
+    if (!filteredDrives.length) {
+      container.innerHTML = emptyState(query);
+      return;
+    }
+
+    // Build drive metadata map
+    const driveMeta = {};
+    filteredDrives.forEach(d => { driveMeta[d.drive_name] = d; });
+
+    // Group folders by drive
+    const grouped = {};
+    filteredDrives.forEach(d => { grouped[d.drive_name] = []; });
+    folderData.forEach(f => {
+      if (grouped[f.drive_name]) grouped[f.drive_name].push(f);
+    });
+
+    const custodianLabel = custodianNames.length === 1
+      ? custodianNames[0]
+      : custodianNames.join(", ");
+    const totalFolders = folderData.length;
+    metaEl.textContent = `${filteredDrives.length} drive${filteredDrives.length!==1?"s":""} · ${totalFolders} folders · with ${custodianLabel}`;
+
+    container.innerHTML = Object.entries(grouped).map(([driveName, folders]) =>
+      driveGroup(driveName, folders, driveMeta[driveName] || {}, null)
+    ).join("");
+
+  } catch(e) {
+    container.innerHTML = errorState("Custodian search failed.");
+  }
 }
 
 async function showDriveSearch(driveNames, query) {
