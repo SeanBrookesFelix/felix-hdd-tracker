@@ -191,6 +191,21 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .cap-row-meta{display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--text3)}
 .cap-row-meta b{color:var(--text2);font-weight:500}
 
+/* ── Drive space list ── */
+.cap-drive-list.hide-full .cap-drive-row.nearly-full{display:none}
+.cap-drive-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)}
+.cap-drive-row:last-child{border-bottom:none}
+.cap-dr-rank{font-size:11px;color:var(--text3);width:22px;text-align:right;flex-shrink:0}
+.cap-dr-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--text1);flex-shrink:0;min-width:130px}
+.cap-dr-custodian{font-size:12px;color:var(--text2);flex-shrink:0;min-width:80px}
+.cap-dr-bar{flex:1;min-width:60px}
+.cap-dr-free{font-size:13px;font-weight:500;flex-shrink:0;min-width:90px;text-align:right}
+.cap-dr-total{font-size:11px;color:var(--text3);flex-shrink:0;min-width:55px}
+.cap-dr-flag{font-size:12px;flex-shrink:0;width:16px}
+.cap-toggle-btn{font-size:12px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+.cap-toggle-btn:hover{border-color:var(--border-h);color:var(--text1)}
+.cap-toggle-btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
 /* ── Pending drives ── */
 .pending-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--red);color:#fff;font-size:10px;font-weight:500;border-radius:20px;min-width:16px;height:16px;padding:0 4px;margin-left:4px;vertical-align:1px}
 .pending-cards{display:flex;flex-direction:column;gap:10px}
@@ -526,6 +541,15 @@ async function ignoreDrive(id, driveName) {
 
 let capLoaded = false;
 
+function toggleFullDrives() {
+  const list = document.getElementById("cap-drive-list");
+  const btn  = document.getElementById("cap-toggle-btn");
+  if (!list || !btn) return;
+  const hiding = list.classList.toggle("hide-full");
+  btn.textContent = hiding ? "Show all drives" : "Hide nearly full (< 400 GB)";
+  btn.classList.toggle("active", hiding);
+}
+
 async function showCapacity() {
   if (capLoaded) return; // only load once
   const container = document.getElementById("cap-container");
@@ -571,9 +595,43 @@ async function showCapacity() {
 
     const fmt = tb => tb >= 1 ? `${tb.toFixed(1)} TB` : `${(tb * 1000).toFixed(0)} GB`;
 
+    // ── Drives by available space ──────────────────────────────
+    const THRESHOLD = 0.4; // 400 GB in TB
+    const sortedByFree = [...drives]
+      .filter(d => d.capacity_tb > 0)
+      .sort((a, b) => (b.free_tb || 0) - (a.free_tb || 0));
+
+    let driveListHtml = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <p class="cap-table-head" style="margin-bottom:0">Drives by available space</p>
+      <button class="cap-toggle-btn" id="cap-toggle-btn" onclick="toggleFullDrives()">Hide nearly full (&lt; 400 GB)</button>
+    </div>
+    <div class="cap-row cap-drive-list" id="cap-drive-list" style="padding:4px 16px 8px">`;
+
+    sortedByFree.forEach((d, i) => {
+      const free   = d.free_tb    || 0;
+      const cap    = d.capacity_tb || 1;
+      const pct    = Math.min(((cap - free) / cap) * 100, 100);
+      const isCrit = free < 0.1;
+      const isWarn = free < THRESHOLD;
+      const barCls = isCrit ? "cap-bar-crit" : isWarn ? "cap-bar-warn" : "cap-bar-used";
+      const clr    = isCrit ? "var(--red-text)" : isWarn ? "var(--amber-text)" : "var(--green-text)";
+      const flag   = isCrit ? "🔴" : isWarn ? "⚠" : "";
+      driveListHtml += `<div class="cap-drive-row${isWarn ? " nearly-full" : ""}">
+        <span class="cap-dr-rank">${i+1}</span>
+        <span class="cap-dr-name">${esc(d.drive_name)}</span>
+        <span class="cap-dr-custodian">${esc(d.custodian || "—")}</span>
+        <div class="cap-dr-bar"><div class="cap-bar-track"><div class="cap-bar-fill ${barCls}" style="width:${pct.toFixed(1)}%"></div></div></div>
+        <span class="cap-dr-free" style="color:${clr}">${fmt(free)} free</span>
+        <span class="cap-dr-total">of ${fmt(cap)}</span>
+        <span class="cap-dr-flag">${flag}</span>
+      </div>`;
+    });
+    driveListHtml += `</div>`;
+
     // ── Render ──
-    let html = `
-    <div class="cap-summary">
+    let html = driveListHtml + `
+    <div class="cap-summary" style="margin-top:24px">
       <div class="cap-stat">
         <div class="cap-stat-label">Total storage</div>
         <div class="cap-stat-value">${fmt(totalCap)}</div>
