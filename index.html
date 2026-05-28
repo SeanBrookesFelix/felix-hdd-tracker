@@ -191,6 +191,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .cap-row-meta{display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--text3)}
 .cap-row-meta b{color:var(--text2);font-weight:500}
 
+.folder-row-search{flex-direction:column;align-items:stretch;gap:3px;padding:10px 16px}
+.fr-main{display:flex;align-items:center;gap:12px}
+.fr-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.fr-sub{font-size:11px;display:flex;align-items:center;gap:8px}
+
 /* ── Drive space list ── */
 .cap-drive-list.hide-full .cap-drive-row.nearly-full{display:none}
 .cap-drive-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)}
@@ -833,7 +838,7 @@ async function showFolders() {
   }
 }
 
-function driveGroup(driveName, folders, meta, query = null) {
+function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
   // Use drive metadata for drive-level fields — folders array may be empty
   const custodian = meta.custodian || (folders[0] && folders[0].custodian) || "";
   const status    = meta.status    || (folders[0] && folders[0].drive_status) || "Active";
@@ -859,7 +864,7 @@ function driveGroup(driveName, folders, meta, query = null) {
     <span class="dg-count">${folders.length} folder${folders.length !== 1 ? "s" : ""}</span>
   </div>`;
 
-  const rows = folders.map(f => folderRow(f, query)).join("");
+  const rows = folders.map(f => rowFn ? rowFn(f, query) : folderRow(f, query)).join("");
 
   return `<div class="drive-group">${header}<div class="drive-group-folders">${rows}</div></div>`;
 }
@@ -1042,9 +1047,48 @@ async function showDriveSearch(driveNames, query) {
   }
 }
 
+function searchFolderBlock(r, query) {
+  const badgeClass = {
+    "Video": "b-video", "Image": "b-image",
+    "Project Files": "b-project", "Audio": "b-audio", "Data Dump": "b-dump"
+  }[r.content_type] || "b-dump";
+
+  const size    = fmtSize(r.folder_size_gb);
+  const fmtDate = r.shoot_date ? formatDate(r.shoot_date) : "";
+  const name    = query ? highlight(esc(r.folder_name), query) : esc(r.folder_name);
+  const bc      = parseInt(r.backup_count) || 0;
+
+  const backupHtml = bc > 0
+    ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+       <span class="backup-ok">${bc} backup${bc!==1?"s":""}</span>
+       <span class="backup-drives">${esc(r.backup_drives||"")}</span>
+       ${r.backup_custodians ? `<span style="color:var(--text3)">with ${esc(r.backup_custodians)}</span>` : ""}`
+    : `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+       <span class="backup-missing">No backup</span>`;
+
+  const notesHtml = r.drive_notes
+    ? `<span style="color:var(--amber-text)">⚠ ${esc(r.drive_notes.split("\n")[0].substring(0,80))}</span>`
+    : "";
+
+  return `<div class="folder-row folder-row-search">
+    <div class="fr-main">
+      <span class="fr-name">${name}</span>
+      <div class="fr-right">
+        ${size ? `<span class="fr-date" style="color:var(--text3)">${size}</span>` : ""}
+        ${fmtDate ? `<span class="fr-date">${fmtDate}</span>` : ""}
+        <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
+      </div>
+    </div>
+    <div class="fr-sub">
+      ${notesHtml}
+      ${backupHtml}
+    </div>
+  </div>`;
+}
+
 async function fuzzySearch(query) {
-  const container  = document.getElementById("results-container");
-  const metaEl     = document.getElementById("results-meta");
+  const container = document.getElementById("results-container");
+  const metaEl    = document.getElementById("results-meta");
   container.innerHTML = `<div class="spinner" style="margin-top:40px"></div>`;
   metaEl.textContent  = "";
 
@@ -1052,29 +1096,47 @@ async function fuzzySearch(query) {
     let results = await rpc("search_folders", { query });
 
     if (!Array.isArray(results)) {
-      container.innerHTML = errorState("Search function error — check Supabase schema update was applied.");
+      container.innerHTML = errorState("Search function error — check Supabase schema.");
       return;
     }
 
-    // Client + drive type + content type filters
-    if (activeClient !== "All") {
-      results = results.filter(r => r.client === activeClient);
-    }
-    if (activeDriveType !== "All") {
-      results = results.filter(r => driveTypeMatch(r.drive_name));
-    }
-    if (activeContentType !== "All") {
-      results = results.filter(r => r.content_type === activeContentType);
-    }
+    // Apply filters
+    if (activeClient !== "All")      results = results.filter(r => r.client === activeClient);
+    if (activeDriveType !== "All")   results = results.filter(r => driveTypeMatch(r.drive_name));
+    if (activeContentType !== "All") results = results.filter(r => r.content_type === activeContentType);
 
-    if (results.length === 0) {
+    if (!results.length) {
       container.innerHTML = emptyState(query);
-      metaEl.textContent  = "";
       return;
     }
 
-    metaEl.textContent = `${results.length} result${results.length!==1?"s":""} for "${query}"`;
-    container.innerHTML = results.map(r => resultCard(r, query)).join("");
+    // Group by drive — preserve relevance order (first match per drive = drive rank)
+    const grouped   = {};
+    const driveOrder = [];
+    results.forEach(r => {
+      if (!grouped[r.drive_name]) {
+        grouped[r.drive_name] = {
+          folders: [],
+          meta: {
+            custodian:    r.custodian,
+            status:       r.drive_status,
+            capacity_tb:  r.capacity_tb,
+            free_tb:      r.free_tb,
+            last_scanned: r.last_scanned,
+          }
+        };
+        driveOrder.push(r.drive_name);
+      }
+      grouped[r.drive_name].folders.push(r);
+    });
+
+    const driveCount = driveOrder.length;
+    metaEl.textContent = `${results.length} result${results.length!==1?"s":""} across ${driveCount} drive${driveCount!==1?"s":""} for "${query}"`;
+
+    container.innerHTML = driveOrder.map(driveName => {
+      const { folders, meta } = grouped[driveName];
+      return driveGroup(driveName, folders, meta, query, searchFolderBlock);
+    }).join("");
 
   } catch(e) {
     container.innerHTML = errorState("Search failed — check your connection.");
