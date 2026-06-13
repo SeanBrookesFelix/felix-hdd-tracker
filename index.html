@@ -196,6 +196,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .fr-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
 .fr-sub{font-size:11px;display:flex;align-items:center;gap:8px}
 
+.folder-row{flex-wrap:wrap}
+.fr-note-wrap{flex-basis:100%;padding:2px 0 0}
+.fr-note{width:100%;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-family:'DM Sans',inherit;font-size:11px;resize:none;outline:none;padding:2px 0;line-height:1.4;overflow:hidden;transition:border-color .15s,color .15s}
+.fr-note:focus{border-bottom-color:var(--accent);color:var(--text2)}
+.fr-note:not(:placeholder-shown){color:var(--accent)}
+
 /* ── Drive space list ── */
 .cap-drive-list.hide-full .cap-drive-row.nearly-full{display:none}
 .cap-drive-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)}
@@ -440,7 +446,38 @@ async function requestScan() {
 
 
 
-// ── Pending drives ────────────────────────────────────────────
+// ── Folder notes ─────────────────────────────────────────────
+
+async function saveNote(el) {
+  const id   = el.dataset.folderId;
+  const text = el.value;
+  if (!id) return;
+  el.classList.add("fr-note-saving");
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/folders?id=eq.${id}`, {
+      method: "PATCH",
+      headers: HEADERS,
+      body: JSON.stringify({ notes: text })
+    });
+  } catch(e) {
+    console.error("Failed to save note:", e);
+  }
+  el.classList.remove("fr-note-saving");
+}
+
+function noteField(id, notes) {
+  const val = (notes || "").replace(/"/g, "&quot;");
+  return `<div class="fr-note-wrap">
+    <textarea class="fr-note" rows="1"
+      data-folder-id="${id}"
+      placeholder="Add note..."
+      onblur="saveNote(this)"
+      oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+    >${val}</textarea>
+  </div>`;
+}
+
+
 
 async function loadPendingBadge() {
   try {
@@ -785,7 +822,7 @@ async function showFolders() {
 
   try {
     // Fetch folders
-    let url = "/rest/v1/folders?select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb&order=shoot_date.desc.nullslast&limit=500";
+    let url = "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500";
     if (activeClient !== "All") url += `&client=eq.${encodeURIComponent(activeClient)}`;
     if (activeContentType !== "All") url += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
     const data = await supaFetch(url);
@@ -889,6 +926,7 @@ function folderRow(r, query) {
     <div class="fr-badges">
       <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
     </div>
+    ${r.id ? noteField(r.id, r.notes) : ""}
   </div>`;
 }
 
@@ -935,7 +973,7 @@ async function showCustodianSearch(custodianNames, query) {
     // Fetch all drives held by these custodians + their folders in parallel
     const [drives, folderData] = await Promise.all([
       supaFetch(`/rest/v1/drives?custodian=in.(${inList})&select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned&order=last_scanned.desc.nullslast`),
-      supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb&order=shoot_date.desc.nullslast&limit=500`)
+      supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500`)
     ]);
 
     // Apply drive type filter
@@ -983,7 +1021,7 @@ async function showDriveSearch(driveNames, query) {
 
     // Fetch folders AND drive metadata in parallel
     const [folderData, metaData] = await Promise.all([
-      supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`),
+      supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`),
       supaFetch(`/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned,custodian,status`)
     ]);
 
@@ -1083,6 +1121,7 @@ function searchFolderBlock(r, query) {
       ${notesHtml}
       ${backupHtml}
     </div>
+    ${r.id ? noteField(r.id, r.notes) : ""}
   </div>`;
 }
 
