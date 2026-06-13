@@ -196,11 +196,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .fr-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
 .fr-sub{font-size:11px;display:flex;align-items:center;gap:8px}
 
-.folder-row{flex-wrap:wrap}
-.fr-note-wrap{flex-basis:100%;padding:2px 0 0}
-.fr-note{width:100%;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-family:'DM Sans',inherit;font-size:11px;resize:none;outline:none;padding:2px 0;line-height:1.4;overflow:hidden;transition:border-color .15s,color .15s}
-.fr-note:focus{border-bottom-color:var(--accent);color:var(--text2)}
-.fr-note:not(:placeholder-shown){color:var(--accent)}
+.fr-note-inline{flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-family:'DM Sans',inherit;font-size:12px;outline:none;padding:2px 6px;transition:border-color .15s,color .15s}
+.fr-note-inline:focus{border-bottom-color:var(--accent);color:var(--text2)}
+.fr-note-inline:not(:placeholder-shown){color:var(--accent)}
 
 /* ── Drive space list ── */
 .cap-drive-list.hide-full .cap-drive-row.nearly-full{display:none}
@@ -467,14 +465,12 @@ async function saveNote(el) {
 
 function noteField(id, notes) {
   const val = (notes || "").replace(/"/g, "&quot;");
-  return `<div class="fr-note-wrap">
-    <textarea class="fr-note" rows="1"
-      data-folder-id="${id}"
-      placeholder="Add note..."
-      onblur="saveNote(this)"
-      oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-    >${val}</textarea>
-  </div>`;
+  return `<input class="fr-note-inline" type="text"
+    data-folder-id="${id}"
+    placeholder="Add note..."
+    value="${val}"
+    onblur="saveNote(this)"
+  />`;
 }
 
 
@@ -921,12 +917,12 @@ function folderRow(r, query) {
 
   return `<div class="folder-row">
     <span class="fr-name">${name}</span>
+    ${r.id ? noteField(r.id, r.notes) : `<span style="flex:1"></span>`}
     ${size ? `<span class="fr-date" style="color:var(--text3)">${size}</span>` : ""}
     ${fmtDate ? `<span class="fr-date">${fmtDate}</span>` : ""}
     <div class="fr-badges">
       <span class="badge ${badgeClass}">${esc(r.content_type || "")}</span>
     </div>
-    ${r.id ? noteField(r.id, r.notes) : ""}
   </div>`;
 }
 
@@ -1111,6 +1107,7 @@ function searchFolderBlock(r, query) {
   return `<div class="folder-row folder-row-search">
     <div class="fr-main">
       <span class="fr-name">${name}</span>
+      ${r.id ? noteField(r.id, r.notes) : `<span style="flex:1"></span>`}
       <div class="fr-right">
         ${size ? `<span class="fr-date" style="color:var(--text3)">${size}</span>` : ""}
         ${fmtDate ? `<span class="fr-date">${fmtDate}</span>` : ""}
@@ -1121,7 +1118,6 @@ function searchFolderBlock(r, query) {
       ${notesHtml}
       ${backupHtml}
     </div>
-    ${r.id ? noteField(r.id, r.notes) : ""}
   </div>`;
 }
 
