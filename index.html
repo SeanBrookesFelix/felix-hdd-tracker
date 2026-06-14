@@ -1166,9 +1166,10 @@ async function fuzzySearch(query) {
     });
 
     const driveCount = driveOrder.length;
+    driveOrder.sort((a, b) => a.localeCompare(b));
     metaEl.textContent = `${results.length} result${results.length!==1?"s":""} across ${driveCount} drive${driveCount!==1?"s":""} for "${query}"`;
 
-    container.innerHTML = driveOrder.map(driveName => {
+    container.innerHTML = driveOrder.sort((a, b) => a.localeCompare(b)).map(driveName => {
       const { folders, meta } = grouped[driveName];
       return driveGroup(driveName, folders, meta, query, searchFolderBlock);
     }).join("");
