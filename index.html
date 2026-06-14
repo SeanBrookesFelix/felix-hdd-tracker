@@ -895,7 +895,7 @@ function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
 
   const capacityStr = meta.capacity_tb ? `${meta.capacity_tb} TB` : "";
   const freeTb      = meta.free_tb != null ? meta.free_tb : null;
-  const freeStr     = freeTb != null ? `${(freeTb * 1000).toFixed(0)} GB free` : "";
+  const freeStr     = freeTb != null ? `${freeTb.toFixed(2)} TB free` : "";
   const freeClass   = freeTb == null ? "" : freeTb < 0.1 ? "dg-free-crit" : freeTb < 0.4 ? "dg-free-warn" : "dg-free-ok";
   const scannedStr  = meta.last_scanned ? `scanned ${timeAgo(meta.last_scanned)}` : "";
   const driveNote   = (meta.notes || "").replace(/"/g, "&quot;");
@@ -920,7 +920,6 @@ function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
       onblur="saveDriveNote(this)"
     />
     ${freeStr ? `<span class="${freeClass}">${freeStr}</span>` : ""}
-    <span class="dg-count">${folders.length} folder${folders.length !== 1 ? "s" : ""}</span>
   </div>`;
 
   const rows = folders.map(f => rowFn ? rowFn(f, query) : folderRow(f, query)).join("");
