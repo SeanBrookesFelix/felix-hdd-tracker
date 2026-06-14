@@ -139,6 +139,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 /* ── Drive notes tooltip ── */
 .drive-notes{font-size:12px;color:var(--amber-text);background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--r);padding:6px 10px;margin-top:6px}
 
+.dg-note-inline{flex:1;min-width:60px;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text3);font-family:'DM Sans',inherit;font-size:11px;outline:none;padding:1px 6px;transition:all .15s}
+.dg-note-inline:focus{border-bottom-color:var(--accent);color:var(--text2)}
+.dg-note-inline:not(:placeholder-shown){color:var(--accent)}
+.dg-free-ok{font-size:12px;font-weight:500;color:var(--green-text);white-space:nowrap;flex-shrink:0}
+.dg-free-warn{font-size:12px;font-weight:500;color:var(--amber-text);white-space:nowrap;flex-shrink:0}
+.dg-free-crit{font-size:12px;font-weight:500;color:var(--red-text);white-space:nowrap;flex-shrink:0}
+
 /* ── Drive groups ── */
 .drive-group{margin-bottom:20px}
 .drive-group-header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border-h);border-radius:var(--r-lg) var(--r-lg) 0 0;flex-wrap:wrap}
@@ -457,10 +464,23 @@ async function saveNote(el) {
       headers: HEADERS,
       body: JSON.stringify({ notes: text })
     });
-  } catch(e) {
-    console.error("Failed to save note:", e);
-  }
+  } catch(e) { console.error("Failed to save note:", e); }
   el.classList.remove("fr-note-saving");
+}
+
+async function saveDriveNote(el) {
+  const name = el.dataset.driveName;
+  const text = el.value;
+  if (!name) return;
+  el.style.opacity = "0.5";
+  try {
+    await fetch(`${SUPA_URL}/rest/v1/drives?drive_name=eq.${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      headers: HEADERS,
+      body: JSON.stringify({ notes: text })
+    });
+  } catch(e) { console.error("Failed to save drive note:", e); }
+  el.style.opacity = "1";
 }
 
 function noteField(id, notes) {
@@ -846,17 +866,13 @@ async function showFolders() {
     let driveMeta    = {};
     try {
       const metaData = await supaFetch(
-        `/rest/v1/drives?drive_name=in.(${driveNames.map(n => `"${n}"`).join(",")})&select=drive_name,capacity_tb,free_tb,last_scanned,felix_id`
+        `/rest/v1/drives?drive_name=in.(${driveNames.map(n => `"${n}"`).join(",")})&select=drive_name,capacity_tb,free_tb,last_scanned,notes`
       );
       metaData.forEach(d => { driveMeta[d.drive_name] = d; });
     } catch(e) {}
 
-    // Sort drives: most recent folder shoot date first
-    const sortedDrives = Object.entries(grouped).sort((a, b) => {
-      const latestA = Math.max(...a[1].map(f => f.shoot_date ? new Date(f.shoot_date).getTime() : 0));
-      const latestB = Math.max(...b[1].map(f => f.shoot_date ? new Date(f.shoot_date).getTime() : 0));
-      return latestB - latestA;
-    });
+    // Sort drives alphabetically by name
+    const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
 
     const clientLabel  = activeClient === "All" ? "all clients" : activeClient;
     const typeLabel    = activeDriveType === "All" ? "" : ` · ${activeDriveType}s only`;
@@ -878,8 +894,11 @@ function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
   const dotClass  = status === "Faulty" ? "dot-faulty" : status === "In Transit" ? "dot-transit" : status === "Missing" ? "dot-faulty" : "dot-active";
 
   const capacityStr = meta.capacity_tb ? `${meta.capacity_tb} TB` : "";
-  const freeStr     = meta.free_tb != null ? `${(meta.free_tb * 1000).toFixed(0)} GB free` : "";
+  const freeTb      = meta.free_tb != null ? meta.free_tb : null;
+  const freeStr     = freeTb != null ? `${(freeTb * 1000).toFixed(0)} GB free` : "";
+  const freeClass   = freeTb == null ? "" : freeTb < 0.1 ? "dg-free-crit" : freeTb < 0.4 ? "dg-free-warn" : "dg-free-ok";
   const scannedStr  = meta.last_scanned ? `scanned ${timeAgo(meta.last_scanned)}` : "";
+  const driveNote   = (meta.notes || "").replace(/"/g, "&quot;");
 
   const header = `<div class="drive-group-header">
     <span class="dg-name">${esc(driveName)}</span>
@@ -891,9 +910,16 @@ function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
       ${custodian ? `<span class="meta-item">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         ${esc(custodian)}</span>` : ""}
-      ${capacityStr ? `<span class="dg-free">${capacityStr}${freeStr ? ` · ${freeStr}` : ""}</span>` : ""}
+      ${capacityStr ? `<span class="dg-free">${capacityStr}</span>` : ""}
       ${scannedStr  ? `<span class="dg-free">${scannedStr}</span>` : ""}
     </div>
+    <input class="dg-note-inline" type="text"
+      data-drive-name="${esc(driveName)}"
+      placeholder="Drive note..."
+      value="${driveNote}"
+      onblur="saveDriveNote(this)"
+    />
+    ${freeStr ? `<span class="${freeClass}">${freeStr}</span>` : ""}
     <span class="dg-count">${folders.length} folder${folders.length !== 1 ? "s" : ""}</span>
   </div>`;
 
@@ -968,7 +994,7 @@ async function showCustodianSearch(custodianNames, query) {
 
     // Fetch all drives held by these custodians + their folders in parallel
     const [drives, folderData] = await Promise.all([
-      supaFetch(`/rest/v1/drives?custodian=in.(${inList})&select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned&order=last_scanned.desc.nullslast`),
+      supaFetch(`/rest/v1/drives?custodian=in.(${inList})&select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned,notes&order=last_scanned.desc.nullslast`),
       supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500`)
     ]);
 
@@ -997,7 +1023,7 @@ async function showCustodianSearch(custodianNames, query) {
     const totalFolders = folderData.length;
     metaEl.textContent = `${filteredDrives.length} drive${filteredDrives.length!==1?"s":""} · ${totalFolders} folders · with ${custodianLabel}`;
 
-    container.innerHTML = Object.entries(grouped).map(([driveName, folders]) =>
+    container.innerHTML = Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0])).map(([driveName, folders]) =>
       driveGroup(driveName, folders, driveMeta[driveName] || {}, null)
     ).join("");
 
@@ -1018,7 +1044,7 @@ async function showDriveSearch(driveNames, query) {
     // Fetch folders AND drive metadata in parallel
     const [folderData, metaData] = await Promise.all([
       supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`),
-      supaFetch(`/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned,custodian,status`)
+      supaFetch(`/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned,custodian,status,notes`)
     ]);
 
     // Build drive metadata map
