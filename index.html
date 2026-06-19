@@ -849,24 +849,31 @@ async function showFolders() {
   metaEl.textContent  = "";
 
   try {
-    // Build folder query
-    let folderUrl = "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500";
-    if (activeClient !== "All")      folderUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
-    if (activeContentType !== "All") folderUrl += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
-
-    // Build drives query (so empty drives appear too) — filter by client at DB level
+    // Step 1: fetch all drives matching the client filter (drive-type
+    // filter applied client-side). This is the authoritative list of
+    // drives to show — including empty ones.
     let drivesUrl = "/rest/v1/drives?select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned,notes&order=drive_name.asc";
     if (activeClient !== "All") drivesUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
-
-    // Fetch both in parallel
-    const [folderData, allDrives] = await Promise.all([
-      supaFetch(folderUrl),
-      supaFetch(drivesUrl)
-    ]);
-
-    // Apply drive-type filter to both
-    const filtered      = folderData.filter(r => driveTypeMatch(r.drive_name));
+    const allDrives = await supaFetch(drivesUrl);
     const filteredDrives = allDrives.filter(d => driveTypeMatch(d.drive_name));
+
+    if (!filteredDrives.length) {
+      container.innerHTML = `<div class="state">
+        <span class="state-icon">◎</span>
+        <p class="state-title">No drives found</p>
+        <p class="state-sub">Try a different client or drive type filter.</p>
+      </div>`;
+      return;
+    }
+
+    // Step 2: fetch folders ONLY for the drives in view. This avoids the
+    // global 500-row cap silently dropping folders for some drives.
+    const driveNameList = filteredDrives.map(d => `"${d.drive_name}"`).join(",");
+    let folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&drive_name=in.(${driveNameList})&order=shoot_date.desc.nullslast&limit=2000`;
+    if (activeContentType !== "All") folderUrl += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
+    const folderData = await supaFetch(folderUrl);
+
+    const filtered = folderData;
 
     // Group folders by drive
     const grouped = {};
@@ -875,8 +882,7 @@ async function showFolders() {
       grouped[f.drive_name].push(f);
     });
 
-    // Build drive metadata map AND ensure every matching drive has a group
-    // (even with zero folders) so empty drives are visible when filtering.
+    // Ensure every matching drive has a group (even with zero folders)
     const driveMeta = {};
     filteredDrives.forEach(d => {
       driveMeta[d.drive_name] = d;
@@ -884,15 +890,6 @@ async function showFolders() {
     });
 
     const driveNames = Object.keys(grouped);
-
-    if (!driveNames.length) {
-      container.innerHTML = `<div class="state">
-        <span class="state-icon">◎</span>
-        <p class="state-title">No drives found</p>
-        <p class="state-sub">Try a different client or drive type filter.</p>
-      </div>`;
-      return;
-    }
 
     // Sort drives alphabetically by name
     const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
