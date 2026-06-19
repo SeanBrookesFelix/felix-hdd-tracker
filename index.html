@@ -849,39 +849,50 @@ async function showFolders() {
   metaEl.textContent  = "";
 
   try {
-    // Fetch folders
-    let url = "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500";
-    if (activeClient !== "All") url += `&client=eq.${encodeURIComponent(activeClient)}`;
-    if (activeContentType !== "All") url += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
-    const data = await supaFetch(url);
-    const filtered = data.filter(r => driveTypeMatch(r.drive_name));
+    // Build folder query
+    let folderUrl = "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500";
+    if (activeClient !== "All")      folderUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
+    if (activeContentType !== "All") folderUrl += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
 
-    if (!filtered.length) {
-      container.innerHTML = `<div class="state">
-        <span class="state-icon">◎</span>
-        <p class="state-title">No folders found</p>
-        <p class="state-sub">Try a different client or drive type filter.</p>
-      </div>`;
-      return;
-    }
+    // Build drives query (so empty drives appear too) — filter by client at DB level
+    let drivesUrl = "/rest/v1/drives?select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned,notes&order=drive_name.asc";
+    if (activeClient !== "All") drivesUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
 
-    // Group folders by drive_name
+    // Fetch both in parallel
+    const [folderData, allDrives] = await Promise.all([
+      supaFetch(folderUrl),
+      supaFetch(drivesUrl)
+    ]);
+
+    // Apply drive-type filter to both
+    const filtered      = folderData.filter(r => driveTypeMatch(r.drive_name));
+    const filteredDrives = allDrives.filter(d => driveTypeMatch(d.drive_name));
+
+    // Group folders by drive
     const grouped = {};
     filtered.forEach(f => {
       if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
       grouped[f.drive_name].push(f);
     });
 
-    // Fetch drive metadata (capacity, free, last_scanned) in one call
+    // Build drive metadata map AND ensure every matching drive has a group
+    // (even with zero folders) so empty drives are visible when filtering.
+    const driveMeta = {};
+    filteredDrives.forEach(d => {
+      driveMeta[d.drive_name] = d;
+      if (!grouped[d.drive_name]) grouped[d.drive_name] = [];
+    });
+
     const driveNames = Object.keys(grouped);
-    const encoded    = driveNames.map(n => encodeURIComponent(`"${n}"`)).join(",");
-    let driveMeta    = {};
-    try {
-      const metaData = await supaFetch(
-        `/rest/v1/drives?drive_name=in.(${driveNames.map(n => `"${n}"`).join(",")})&select=drive_name,capacity_tb,free_tb,last_scanned,notes`
-      );
-      metaData.forEach(d => { driveMeta[d.drive_name] = d; });
-    } catch(e) {}
+
+    if (!driveNames.length) {
+      container.innerHTML = `<div class="state">
+        <span class="state-icon">◎</span>
+        <p class="state-title">No drives found</p>
+        <p class="state-sub">Try a different client or drive type filter.</p>
+      </div>`;
+      return;
+    }
 
     // Sort drives alphabetically by name
     const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
@@ -889,7 +900,7 @@ async function showFolders() {
     const clientLabel  = activeClient === "All" ? "all clients" : activeClient;
     const typeLabel    = activeDriveType === "All" ? "" : ` · ${activeDriveType}s only`;
     const contentLabel = activeContentType === "All" ? "" : ` · ${activeContentType} only`;
-    metaEl.textContent = `${driveNames.length} drives · ${filtered.length} folders · ${clientLabel}${typeLabel}${contentLabel}`;
+    metaEl.textContent = `${driveNames.length} drive${driveNames.length!==1?"s":""} · ${filtered.length} folder${filtered.length!==1?"s":""} · ${clientLabel}${typeLabel}${contentLabel}`;
     container.innerHTML = sortedDrives.map(([driveName, folders]) =>
       driveGroup(driveName, folders, driveMeta[driveName] || {})
     ).join("");
@@ -934,7 +945,9 @@ function driveGroup(driveName, folders, meta, query = null, rowFn = null) {
     ${freeStr ? `<span class="${freeClass}">${freeStr}</span>` : ""}
   </div>`;
 
-  const rows = folders.map(f => rowFn ? rowFn(f, query) : folderRow(f, query)).join("");
+  const rows = folders.length
+    ? folders.map(f => rowFn ? rowFn(f, query) : folderRow(f, query)).join("")
+    : `<div class="folder-row" style="color:var(--text3);font-size:12px;padding:10px 16px">No folders on this drive yet</div>`;
 
   return `<div class="drive-group">${header}<div class="drive-group-folders">${rows}</div></div>`;
 }
