@@ -347,7 +347,14 @@ let allDriveNames = [];
 
 async function supaFetch(path, opts={}) {
   const r = await fetch(SUPA_URL + path, { headers: HEADERS, ...opts });
-  return r.json();
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).message || ""; } catch(e) {}
+    throw new Error(`Request failed (${r.status})${detail ? ": " + detail : ""}`);
+  }
+  // Some requests (HEAD, count-only) have no JSON body
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
 }
 
 async function rpc(fn, params) {
@@ -355,6 +362,11 @@ async function rpc(fn, params) {
     method: "POST", headers: HEADERS,
     body: JSON.stringify(params)
   });
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).message || ""; } catch(e) {}
+    throw new Error(`Search failed (${r.status})${detail ? ": " + detail : ""}`);
+  }
   return r.json();
 }
 
