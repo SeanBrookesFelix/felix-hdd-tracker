@@ -866,18 +866,32 @@ async function showFolders() {
       return;
     }
 
-    // Step 2: fetch folders ONLY for the drives in view. This avoids the
-    // global 500-row cap silently dropping folders for some drives.
-    const driveNameList = filteredDrives.map(d => `"${d.drive_name}"`).join(",");
-    let folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&drive_name=in.(${driveNameList})&order=shoot_date.desc.nullslast&limit=2000`;
+    // Step 2: fetch folders for the drives in view.
+    // When a client filter is active the drive list is small, so we can
+    // scope folders to those exact drives. With no client filter the
+    // list could be ~177 drives — too many for a URL `in.()` clause — so
+    // we fetch folders broadly with a high limit instead.
+    let folderUrl;
+    const useInClause = activeClient !== "All" && filteredDrives.length <= 50;
+    if (useInClause) {
+      const driveNameList = filteredDrives.map(d => `"${d.drive_name}"`).join(",");
+      folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&drive_name=in.(${driveNameList})&order=shoot_date.desc.nullslast&limit=2000`;
+    } else {
+      folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=5000`;
+      if (activeClient !== "All") folderUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
+    }
     if (activeContentType !== "All") folderUrl += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
     const folderData = await supaFetch(folderUrl);
 
     const filtered = folderData;
 
-    // Group folders by drive
+    // Set of drives allowed in this view (after client + drive-type filter)
+    const allowedDrives = new Set(filteredDrives.map(d => d.drive_name));
+
+    // Group folders by drive — only for drives in the filtered set
     const grouped = {};
     filtered.forEach(f => {
+      if (!allowedDrives.has(f.drive_name)) return;
       if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
       grouped[f.drive_name].push(f);
     });
@@ -894,10 +908,11 @@ async function showFolders() {
     // Sort drives alphabetically by name
     const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
 
+    const shownFolderCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
     const clientLabel  = activeClient === "All" ? "all clients" : activeClient;
     const typeLabel    = activeDriveType === "All" ? "" : ` · ${activeDriveType}s only`;
     const contentLabel = activeContentType === "All" ? "" : ` · ${activeContentType} only`;
-    metaEl.textContent = `${driveNames.length} drive${driveNames.length!==1?"s":""} · ${filtered.length} folder${filtered.length!==1?"s":""} · ${clientLabel}${typeLabel}${contentLabel}`;
+    metaEl.textContent = `${driveNames.length} drive${driveNames.length!==1?"s":""} · ${shownFolderCount} folder${shownFolderCount!==1?"s":""} · ${clientLabel}${typeLabel}${contentLabel}`;
     container.innerHTML = sortedDrives.map(([driveName, folders]) =>
       driveGroup(driveName, folders, driveMeta[driveName] || {})
     ).join("");
