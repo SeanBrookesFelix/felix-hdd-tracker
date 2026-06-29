@@ -866,44 +866,57 @@ async function showFolders() {
       return;
     }
 
-    // Step 2: fetch folders for the drives in view.
-    // When a client filter is active the drive list is small, so we can
-    // scope folders to those exact drives. With no client filter the
-    // list could be ~177 drives — too many for a URL `in.()` clause — so
-    // we fetch folders broadly with a high limit instead.
-    let folderUrl;
-    const useInClause = activeClient !== "All" && filteredDrives.length <= 50;
-    if (useInClause) {
-      const driveNameList = filteredDrives.map(d => `"${d.drive_name}"`).join(",");
-      folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&drive_name=in.(${driveNameList})&order=shoot_date.desc.nullslast&limit=2000`;
-    } else {
-      folderUrl = `/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=5000`;
-      if (activeClient !== "All") folderUrl += `&client=eq.${encodeURIComponent(activeClient)}`;
-    }
-    if (activeContentType !== "All") folderUrl += `&content_type=eq.${encodeURIComponent(activeContentType)}`;
-    const folderData = await supaFetch(folderUrl);
-
-    const filtered = folderData;
+    // Step 2: fetch ALL folders once with a high limit, then filter
+    // client-side. With ~1,100 folders this is well within one request
+    // and avoids fragile/oversized in.() clauses with special characters
+    // in drive names (spaces, slashes, ampersands).
+    const folderData = await supaFetch(
+      "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=5000"
+    );
 
     // Set of drives allowed in this view (after client + drive-type filter)
     const allowedDrives = new Set(filteredDrives.map(d => d.drive_name));
 
-    // Group folders by drive — only for drives in the filtered set
+    // Filter folders: must belong to an allowed drive, and match the
+    // content-type filter if one is active.
+    const filtered = folderData.filter(f => {
+      if (!allowedDrives.has(f.drive_name)) return false;
+      if (activeContentType !== "All" && f.content_type !== activeContentType) return false;
+      return true;
+    });
+
+    // Group folders by drive
     const grouped = {};
     filtered.forEach(f => {
-      if (!allowedDrives.has(f.drive_name)) return;
       if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
       grouped[f.drive_name].push(f);
     });
 
-    // Ensure every matching drive has a group (even with zero folders)
+    // Determine which drives to actually display.
+    // - No content filter: show ALL allowed drives (incl. empty ones).
+    // - Content filter active: only show drives that have at least one
+    //   matching folder (an "Image" filter shouldn't list drives with
+    //   no image folders).
     const driveMeta = {};
-    filteredDrives.forEach(d => {
-      driveMeta[d.drive_name] = d;
-      if (!grouped[d.drive_name]) grouped[d.drive_name] = [];
-    });
+    filteredDrives.forEach(d => { driveMeta[d.drive_name] = d; });
+
+    if (activeContentType === "All") {
+      // Include empty drives as empty groups
+      filteredDrives.forEach(d => {
+        if (!grouped[d.drive_name]) grouped[d.drive_name] = [];
+      });
+    }
 
     const driveNames = Object.keys(grouped);
+
+    if (!driveNames.length) {
+      container.innerHTML = `<div class="state">
+        <span class="state-icon">◎</span>
+        <p class="state-title">No matching drives</p>
+        <p class="state-sub">No drives match these filters. Try adjusting them.</p>
+      </div>`;
+      return;
+    }
 
     // Sort drives alphabetically by name
     const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
@@ -1026,7 +1039,7 @@ async function showCustodianSearch(custodianNames, query) {
   metaEl.textContent  = "";
 
   try {
-    const inList = custodianNames.map(n => `"${n}"`).join(",");
+    const inList = custodianNames.map(n => encodeURIComponent(`"${n}"`)).join(",");
 
     // Fetch all drives held by these custodians + their folders in parallel
     const [drives, folderData] = await Promise.all([
@@ -1075,7 +1088,7 @@ async function showDriveSearch(driveNames, query) {
   metaEl.textContent  = "";
 
   try {
-    const inList = driveNames.map(n => `"${n}"`).join(",");
+    const inList = driveNames.map(n => encodeURIComponent(`"${n}"`)).join(",");
 
     // Fetch folders AND drive metadata in parallel
     const [folderData, metaData] = await Promise.all([
