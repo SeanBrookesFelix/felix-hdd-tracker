@@ -357,6 +357,32 @@ async function supaFetch(path, opts={}) {
   return text ? JSON.parse(text) : null;
 }
 
+// Fetch ALL rows for a query, paging past PostgREST's default 1,000-row
+// cap using Range headers. Use for any query that could exceed 1,000 rows
+// (e.g. the full folders table). Pages in 1,000-row blocks until a short
+// page signals the end. Capped at 50 pages (50k rows) as a safety stop.
+async function supaFetchAll(path) {
+  const PAGE = 1000;
+  let from = 0, all = [];
+  for (let page = 0; page < 50; page++) {
+    const to = from + PAGE - 1;
+    const r = await fetch(SUPA_URL + path, {
+      headers: { ...HEADERS, "Range-Unit": "items", "Range": `${from}-${to}` }
+    });
+    if (!r.ok && r.status !== 206) {
+      let detail = "";
+      try { detail = (await r.json()).message || ""; } catch(e) {}
+      throw new Error(`Request failed (${r.status})${detail ? ": " + detail : ""}`);
+    }
+    const text = await r.text();
+    const rows = text ? JSON.parse(text) : [];
+    all = all.concat(rows);
+    if (rows.length < PAGE) break; // last page
+    from += PAGE;
+  }
+  return all;
+}
+
 async function rpc(fn, params) {
   const r = await fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`, {
     method: "POST", headers: HEADERS,
@@ -866,12 +892,12 @@ async function showFolders() {
       return;
     }
 
-    // Step 2: fetch ALL folders once with a high limit, then filter
-    // client-side. With ~1,100 folders this is well within one request
-    // and avoids fragile/oversized in.() clauses with special characters
-    // in drive names (spaces, slashes, ampersands).
-    const folderData = await supaFetch(
-      "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=5000"
+    // Step 2: fetch ALL folders, paging past the 1,000-row cap. Ordering
+    // is intentionally omitted here — with nullslast ordering plus the row
+    // cap, NULL-dated folders were being truncated and their drives showed
+    // empty. We page through everything and sort client-side instead.
+    const folderData = await supaFetchAll(
+      "/rest/v1/folders?select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes"
     );
 
     // Set of drives allowed in this view (after client + drive-type filter)
@@ -890,6 +916,16 @@ async function showFolders() {
     filtered.forEach(f => {
       if (!grouped[f.drive_name]) grouped[f.drive_name] = [];
       grouped[f.drive_name].push(f);
+    });
+
+    // Sort folders within each drive: shoot_date desc, NULLs last
+    Object.values(grouped).forEach(arr => {
+      arr.sort((a, b) => {
+        if (!a.shoot_date && !b.shoot_date) return 0;
+        if (!a.shoot_date) return 1;   // a is null → after b
+        if (!b.shoot_date) return -1;  // b is null → after a
+        return b.shoot_date.localeCompare(a.shoot_date); // desc
+      });
     });
 
     // Determine which drives to actually display.
@@ -1044,7 +1080,7 @@ async function showCustodianSearch(custodianNames, query) {
     // Fetch all drives held by these custodians + their folders in parallel
     const [drives, folderData] = await Promise.all([
       supaFetch(`/rest/v1/drives?custodian=in.(${inList})&select=drive_name,client,custodian,status,capacity_tb,free_tb,last_scanned,notes&order=last_scanned.desc.nullslast`),
-      supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=500`)
+      supaFetch(`/rest/v1/folders?custodian=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=shoot_date.desc.nullslast&limit=1000`)
     ]);
 
     // Apply drive type filter
@@ -1092,7 +1128,7 @@ async function showDriveSearch(driveNames, query) {
 
     // Fetch folders AND drive metadata in parallel
     const [folderData, metaData] = await Promise.all([
-      supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=drive_name.asc,shoot_date.desc.nullslast&limit=500`),
+      supaFetch(`/rest/v1/folders?drive_name=in.(${inList})&select=id,folder_name,shoot_date,content_type,client,custodian,drive_status,drive_name,folder_size_gb,notes&order=drive_name.asc,shoot_date.desc.nullslast&limit=1000`),
       supaFetch(`/rest/v1/drives?drive_name=in.(${inList})&select=drive_name,capacity_tb,free_tb,last_scanned,custodian,status,notes`)
     ]);
 
