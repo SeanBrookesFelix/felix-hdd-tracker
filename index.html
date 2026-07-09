@@ -48,6 +48,18 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .logo-divider{width:1px;height:16px;background:var(--border)}
 .logo-sub{font-size:12px;color:var(--text3);letter-spacing:0.04em}
 .header-stats{display:flex;gap:8px}
+.hstat-scanners{cursor:pointer;display:flex;align-items:center;gap:6px}
+.scanner-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.scanner-dot.ok{background:var(--green)}
+.scanner-dot.warn{background:var(--amber)}
+.scanner-dot.off{background:var(--red)}
+.scanner-detail{max-width:1100px;margin:0 auto;padding:0 24px;display:none}
+.scanner-detail.open{display:block;padding:12px 24px}
+.scanner-detail-inner{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--text2)}
+.sd-row{display:flex;align-items:center;gap:10px;padding:4px 0}
+.sd-row .status-dot{width:7px;height:7px;border-radius:50%}
+.sd-name{color:var(--text1);min-width:80px}
+.sd-when{color:var(--text3);margin-left:auto;font-family:'DM Mono',monospace}
 .hstat{font-size:12px;color:var(--text2);padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border)}
 .hstat b{color:var(--text1);font-weight:500}
 
@@ -269,8 +281,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <div class="header-stats" id="header-stats">
     <span class="hstat"><b id="stat-drives">—</b> drives</span>
     <span class="hstat"><b id="stat-folders">—</b> folders</span>
+    <span class="hstat hstat-scanners" id="stat-scanners" title="Scanner status">
+      <span class="scanner-dot" id="scanner-dot"></span><span id="scanner-label">scanners</span>
+    </span>
   </div>
 </header>
+<div class="scanner-detail" id="scanner-detail"></div>
 
 <main class="main">
 
@@ -420,6 +436,13 @@ async function init() {
   setupContentFilters();
   loadPendingBadge();
   showFolders();
+
+  // Scanner heartbeat indicator: load now, refresh every 60s, and let
+  // the header pill toggle a per-scanner detail panel.
+  loadScannerStatus();
+  setInterval(loadScannerStatus, 60000);
+  const scannerPill = document.getElementById("stat-scanners");
+  if (scannerPill) scannerPill.addEventListener("click", toggleScannerDetail);
 }
 
 // ── Tab switching ─────────────────────────────────────────────
@@ -817,6 +840,55 @@ async function loadStats() {
     if (dc) document.getElementById("stat-drives").textContent  = parseInt(dc).toLocaleString();
     if (fc) document.getElementById("stat-folders").textContent = parseInt(fc).toLocaleString();
   } catch(e) {}
+}
+
+// A scanner counts as "active" if its heartbeat is under 3 minutes old
+// (the daemon beats every ~60s, so this tolerates a couple of missed beats).
+const SCANNER_ACTIVE_MS = 3 * 60 * 1000;
+
+async function loadScannerStatus() {
+  const dot   = document.getElementById("scanner-dot");
+  const label = document.getElementById("scanner-label");
+  const detail= document.getElementById("scanner-detail");
+  if (!dot) return;
+  try {
+    const rows = await supaFetch("/rest/v1/scanner_status?select=custodian,hostname,last_heartbeat,drives_connected&order=custodian.asc");
+    if (!rows || !rows.length) {
+      dot.className = "scanner-dot off";
+      label.textContent = "no scanners";
+      detail.innerHTML = `<div class="scanner-detail-inner">No scanner has checked in yet.</div>`;
+      return;
+    }
+
+    const now = Date.now();
+    let active = 0, stale = 0;
+    const rowsHtml = rows.map(r => {
+      const age = now - new Date(r.last_heartbeat).getTime();
+      const isActive = age < SCANNER_ACTIVE_MS;
+      if (isActive) active++; else stale++;
+      const dotCls = isActive ? "dot-active" : "dot-faulty";
+      return `<div class="sd-row">
+        <span class="status-dot ${dotCls}"></span>
+        <span class="sd-name">${esc(r.custodian)}</span>
+        <span style="color:var(--text3)">${esc(r.hostname || "")} · ${r.drives_connected||0} drive${r.drives_connected===1?"":"s"}</span>
+        <span class="sd-when">${isActive ? "active" : "offline"} · ${timeAgo(r.last_heartbeat)}</span>
+      </div>`;
+    }).join("");
+
+    // Header dot: green if all active, amber if some stale, red if all off
+    if (stale === 0)      { dot.className = "scanner-dot ok";   label.textContent = `${active} scanner${active===1?"":"s"}`; }
+    else if (active > 0)  { dot.className = "scanner-dot warn"; label.textContent = `${active}/${rows.length} active`; }
+    else                  { dot.className = "scanner-dot off";  label.textContent = `all offline`; }
+
+    detail.innerHTML = `<div class="scanner-detail-inner">${rowsHtml}</div>`;
+  } catch(e) {
+    dot.className = "scanner-dot";
+    label.textContent = "scanners";
+  }
+}
+
+function toggleScannerDetail() {
+  document.getElementById("scanner-detail").classList.toggle("open");
 }
 
 async function loadClients() {
