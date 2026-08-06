@@ -749,8 +749,8 @@ async function showCapacity() {
     driveListHtml += `</div>`;
 
     // ── Render ──
-    let html = driveListHtml + `
-    <div class="cap-summary" style="margin-top:24px">
+    let html = `
+    <div class="cap-summary">
       <div class="cap-stat">
         <div class="cap-stat-label">Total storage</div>
         <div class="cap-stat-value">${fmt(totalCap)}</div>
@@ -798,7 +798,9 @@ async function showCapacity() {
         </div>`;
       });
 
-    html += `</div>`;
+    html += `</div>
+
+    <div style="margin-top:28px">${driveListHtml}</div>`;
     container.innerHTML = html;
     capLoaded = true;
 
