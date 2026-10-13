@@ -772,8 +772,7 @@ async function showCapacity() {
         <div class="cap-stat-sub">${faultyCt > 0 ? `<span style="color:var(--red-text)">${faultyCt} faulty/missing</span>` : "all healthy"}</div>
       </div>
     </div>
-
-    html += `<div style="margin-top:28px">${driveListHtml}</div>`;
+    <div style="margin-top:28px">${driveListHtml}</div>`;
     container.innerHTML = html;
     capLoaded = true;
 
