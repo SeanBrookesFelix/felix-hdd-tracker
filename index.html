@@ -331,6 +331,17 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         <button class="pill active" data-client="All">All clients</button>
       </div>
     </div>
+    <div class="filter-group" id="sort-group">
+      <div class="filter-label">Sort</div>
+      <div class="filters">
+        <button class="cap-toggle-btn active" id="sort-free-btn" title="Sort by free space">
+          Free space: most → least
+        </button>
+        <button class="cap-toggle-btn" id="sort-name-btn" title="Sort by drive name">
+          Name: A → Z
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="results-meta" id="results-meta"></div>
@@ -356,6 +367,7 @@ const HEADERS  = { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "C
 let activeClient = "All";
 let activeCustodian = "All";
 let activeContentType = "All";
+let activeSort   = "free-desc";
 let searchQuery  = "";
 let debounceTimer;
 let allClients   = [];
@@ -996,8 +1008,15 @@ async function showFolders() {
       return;
     }
 
-    // Sort drives alphabetically by name
-    const sortedDrives = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+    // Sort drives by activeSort setting
+    const sortedDrives = Object.entries(grouped).sort((a, b) => {
+      const ma = driveMeta[a[0]] || {};
+      const mb = driveMeta[b[0]] || {};
+      if (activeSort === "free-desc") return (mb.free_tb || 0) - (ma.free_tb || 0);
+      if (activeSort === "free-asc")  return (ma.free_tb || 0) - (mb.free_tb || 0);
+      if (activeSort === "name-desc") return b[0].localeCompare(a[0]);
+      return a[0].localeCompare(b[0]); // name-asc
+    });
 
     const shownFolderCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
     const clientLabel     = activeClient === "All" ? "all clients" : activeClient;
@@ -1467,14 +1486,49 @@ function timeAgo(iso) {
   return formatDate(iso.split("T")[0]);
 }
 
+// ── Sort toggle wiring ────────────────────────────────────────
+
+const sortFreeBtn = document.getElementById("sort-free-btn");
+const sortNameBtn = document.getElementById("sort-name-btn");
+
+const sortLabels = {
+  "free-desc": "Free space: most → least",
+  "free-asc":  "Free space: least → most",
+  "name-asc":  "Name: A → Z",
+  "name-desc": "Name: Z → A",
+};
+
+sortFreeBtn.addEventListener("click", () => {
+  if (activeSort === "free-desc") activeSort = "free-asc";
+  else activeSort = "free-desc";
+  sortFreeBtn.textContent = sortLabels[activeSort];
+  sortFreeBtn.classList.add("active");
+  sortNameBtn.classList.remove("active");
+  sortNameBtn.textContent = sortLabels["name-asc"];
+  showFolders();
+});
+
+sortNameBtn.addEventListener("click", () => {
+  if (activeSort === "name-asc") activeSort = "name-desc";
+  else activeSort = "name-asc";
+  sortNameBtn.textContent = sortLabels[activeSort];
+  sortNameBtn.classList.add("active");
+  sortFreeBtn.classList.remove("active");
+  sortFreeBtn.textContent = sortLabels["free-desc"];
+  showFolders();
+});
+
 // ── Event wiring ──────────────────────────────────────────────
 
 const searchEl = document.getElementById("search");
 const clearBtn = document.getElementById("search-clear");
 
+const sortGroup = document.getElementById("sort-group");
+
 searchEl.addEventListener("input", e => {
   searchQuery = e.target.value.trim();
   clearBtn.classList.toggle("visible", searchQuery.length > 0);
+  sortGroup.style.display = searchQuery ? "none" : "";
   clearTimeout(debounceTimer);
   if (!searchQuery) {
     document.getElementById("results-meta").textContent = "";
@@ -1489,6 +1543,7 @@ clearBtn.addEventListener("click", () => {
   searchEl.value = "";
   searchQuery    = "";
   clearBtn.classList.remove("visible");
+  sortGroup.style.display = "";
   document.getElementById("results-meta").textContent = "";
   showFolders();
   searchEl.focus();
