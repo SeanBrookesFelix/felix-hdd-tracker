@@ -309,6 +309,21 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         <button class="pill pill-custodian" data-custodian="Bryan">Bryan</button>
         <button class="pill pill-custodian" data-custodian="Tristan">Tristan</button>
         <button class="pill pill-custodian" data-custodian="Rebecca">Rebecca</button>
+        <span style="width:1px;background:var(--border);align-self:stretch;margin:0 4px;display:inline-block;opacity:.5"></span>
+        <button class="cap-toggle-btn active" id="sort-free-btn" title="Sort by free space" style="display:flex;align-items:center;gap:5px">
+          Free space
+          <span id="sort-free-icon" style="display:flex;flex-direction:column;gap:1px;line-height:1">
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z"/></svg>
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" style="opacity:.35"><path d="M4 5L0 0H8L4 5Z"/></svg>
+          </span>
+        </button>
+        <button class="cap-toggle-btn" id="sort-name-btn" title="Sort by drive name" style="display:flex;align-items:center;gap:5px">
+          Name
+          <span id="sort-name-icon" style="display:flex;flex-direction:column;gap:1px;line-height:1">
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" style="opacity:.35"><path d="M4 0L8 5H0L4 0Z"/></svg>
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" style="opacity:.35"><path d="M4 5L0 0H8L4 5Z"/></svg>
+          </span>
+        </button>
       </div>
     </div>
     <div class="filter-group">
@@ -329,17 +344,6 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="filter-label">Client</div>
       <div class="filters" id="filters">
         <button class="pill active" data-client="All">All clients</button>
-      </div>
-    </div>
-    <div class="filter-group" id="sort-group">
-      <div class="filter-label">Sort</div>
-      <div class="filters">
-        <button class="cap-toggle-btn active" id="sort-free-btn" title="Sort by free space">
-          Free space: most → least
-        </button>
-        <button class="cap-toggle-btn" id="sort-name-btn" title="Sort by drive name">
-          Name: A → Z
-        </button>
       </div>
     </div>
   </div>
@@ -1488,33 +1492,43 @@ function timeAgo(iso) {
 
 // ── Sort toggle wiring ────────────────────────────────────────
 
-const sortFreeBtn = document.getElementById("sort-free-btn");
-const sortNameBtn = document.getElementById("sort-name-btn");
+const sortFreeBtn  = document.getElementById("sort-free-btn");
+const sortNameBtn  = document.getElementById("sort-name-btn");
+const sortFreeIcon = document.getElementById("sort-free-icon");
+const sortNameIcon = document.getElementById("sort-name-icon");
 
-const sortLabels = {
-  "free-desc": "Free space: most → least",
-  "free-asc":  "Free space: least → most",
-  "name-asc":  "Name: A → Z",
-  "name-desc": "Name: Z → A",
-};
+const upActive   = `<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 0L8 5H0L4 0Z"/></svg>`;
+const downActive = `<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor"><path d="M4 5L0 0H8L4 5Z"/></svg>`;
+const upDim      = `<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" style="opacity:.35"><path d="M4 0L8 5H0L4 0Z"/></svg>`;
+const downDim    = `<svg width="8" height="5" viewBox="0 0 8 5" fill="currentColor" style="opacity:.35"><path d="M4 5L0 0H8L4 5Z"/></svg>`;
+const bothDim    = upDim + downDim;
+
+function updateSortIcons() {
+  // Free space icon
+  if (activeSort === "free-desc") sortFreeIcon.innerHTML = upActive + downDim;
+  else if (activeSort === "free-asc") sortFreeIcon.innerHTML = upDim + downActive;
+  else sortFreeIcon.innerHTML = bothDim;
+  // Name icon
+  if (activeSort === "name-asc")  sortNameIcon.innerHTML = upActive + downDim;
+  else if (activeSort === "name-desc") sortNameIcon.innerHTML = upDim + downActive;
+  else sortNameIcon.innerHTML = bothDim;
+}
 
 sortFreeBtn.addEventListener("click", () => {
   if (activeSort === "free-desc") activeSort = "free-asc";
   else activeSort = "free-desc";
-  sortFreeBtn.textContent = sortLabels[activeSort];
   sortFreeBtn.classList.add("active");
   sortNameBtn.classList.remove("active");
-  sortNameBtn.textContent = sortLabels["name-asc"];
+  updateSortIcons();
   showFolders();
 });
 
 sortNameBtn.addEventListener("click", () => {
   if (activeSort === "name-asc") activeSort = "name-desc";
   else activeSort = "name-asc";
-  sortNameBtn.textContent = sortLabels[activeSort];
   sortNameBtn.classList.add("active");
   sortFreeBtn.classList.remove("active");
-  sortFreeBtn.textContent = sortLabels["free-desc"];
+  updateSortIcons();
   showFolders();
 });
 
@@ -1523,12 +1537,9 @@ sortNameBtn.addEventListener("click", () => {
 const searchEl = document.getElementById("search");
 const clearBtn = document.getElementById("search-clear");
 
-const sortGroup = document.getElementById("sort-group");
-
 searchEl.addEventListener("input", e => {
   searchQuery = e.target.value.trim();
   clearBtn.classList.toggle("visible", searchQuery.length > 0);
-  sortGroup.style.display = searchQuery ? "none" : "";
   clearTimeout(debounceTimer);
   if (!searchQuery) {
     document.getElementById("results-meta").textContent = "";
@@ -1543,7 +1554,6 @@ clearBtn.addEventListener("click", () => {
   searchEl.value = "";
   searchQuery    = "";
   clearBtn.classList.remove("visible");
-  sortGroup.style.display = "";
   document.getElementById("results-meta").textContent = "";
   showFolders();
   searchEl.focus();
